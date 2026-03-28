@@ -238,6 +238,13 @@ fn create_terminal_widget(
                 }
             };
 
+            tracing::debug!(
+                %panel_id,
+                was_unfocused,
+                first_click_focus = crate::settings::load().first_click_focus,
+                "click-to-focus pressed"
+            );
+
             // When first_click_focus is enabled and this pane was
             // unfocused, claim the event so the click only focuses
             // without passing through to the terminal.

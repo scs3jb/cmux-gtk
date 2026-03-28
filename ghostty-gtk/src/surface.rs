@@ -430,6 +430,12 @@ impl GhosttyGlSurface {
         {
             let surface_widget = self.clone();
             key_controller.connect_key_pressed(move |controller, keyval, keycode, state| {
+                tracing::trace!(
+                    keyval = keyval.into_glib(),
+                    keycode,
+                    ?state,
+                    "key_pressed"
+                );
                 surface_widget.on_key_event(
                     controller,
                     keyval.into_glib(),
@@ -442,6 +448,12 @@ impl GhosttyGlSurface {
         {
             let surface_widget = self.clone();
             key_controller.connect_key_released(move |controller, keyval, keycode, state| {
+                tracing::trace!(
+                    keyval = keyval.into_glib(),
+                    keycode,
+                    ?state,
+                    "key_released"
+                );
                 surface_widget.on_key_event(
                     controller,
                     keyval.into_glib(),
@@ -754,6 +766,7 @@ impl GhosttyGlSurface {
 
     #[allow(clippy::needless_return)] // guard clause before cfg-gated closure body
     fn on_focus_change(&self, focused: bool) {
+        tracing::debug!(focused, "surface focus_change");
         self.imp().focused.set(focused);
         let surface = self.imp().surface.get();
         if let Some(im_context) = self.imp().im_context.borrow().as_ref() {
@@ -883,7 +896,11 @@ impl GhosttyGlSurface {
         }
 
         let pending = std::mem::take(&mut *self.imp().pending_text.borrow_mut());
+        if !pending.is_empty() {
+            tracing::debug!(count = pending.len(), "flush_pending_text");
+        }
         for text in pending {
+            tracing::debug!(text_len = text.len(), text_preview = %&text[..text.len().min(40)], "flush_pending_text: sending");
             let _ = self.write_text(surface, &text);
         }
     }
