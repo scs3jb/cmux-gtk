@@ -207,6 +207,24 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
     focus_style_row.set_selected(current_settings.sidebar.focus_style.to_index());
     sidebar_group.add(&focus_style_row);
 
+    let port_external_row = adw::SwitchRow::new();
+    port_external_row.set_title("Open Ports Externally");
+    port_external_row.set_subtitle("Click port badges to open in the system browser instead of a panel");
+    port_external_row.set_active(current_settings.sidebar.port_link_external);
+    sidebar_group.add(&port_external_row);
+
+    let selection_color_row = adw::EntryRow::new();
+    selection_color_row.set_title("Selection Highlight Color");
+    selection_color_row.set_tooltip_text(Some("CSS color for the selected workspace (e.g. #3584e4). Leave empty to use the default accent color."));
+    selection_color_row.set_text(&current_settings.sidebar.selection_color);
+    sidebar_group.add(&selection_color_row);
+
+    let match_terminal_bg_row = adw::SwitchRow::new();
+    match_terminal_bg_row.set_title("Match Terminal Background");
+    match_terminal_bg_row.set_subtitle("Use the terminal's background color for the sidebar");
+    match_terminal_bg_row.set_active(current_settings.sidebar.match_terminal_background);
+    sidebar_group.add(&match_terminal_bg_row);
+
     appearance_page.add(&sidebar_group);
 
     window.add(&appearance_page);
@@ -685,9 +703,9 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
                     tint_color: current_settings.sidebar.tint_color.clone(),
                     tint_color_light: current_settings.sidebar.tint_color_light.clone(),
                     tint_color_dark: current_settings.sidebar.tint_color_dark.clone(),
-                    port_link_external: current_settings.sidebar.port_link_external,
-                    selection_color: current_settings.sidebar.selection_color.clone(),
-                    match_terminal_background: current_settings.sidebar.match_terminal_background,
+                    port_link_external: port_external_row.is_active(),
+                    selection_color: selection_color_row.text().to_string(),
+                    match_terminal_background: match_terminal_bg_row.is_active(),
                 },
                 browser: BrowserSettings {
                     search_engine: SearchEngine::from_index(engine_row.selected()),

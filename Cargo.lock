@@ -222,6 +222,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "shell-escape",
+ "soup3",
  "thiserror",
  "tokio",
  "tracing",
