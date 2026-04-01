@@ -415,7 +415,18 @@ case "$command" in
     _cmux_send "settings"
     ;;
   markdown|md)
-    _cmux_send "markdown \"${1:-}\""
+    md_direction=""
+    md_file=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --direction|-d) shift; md_direction="${1:-}"; shift ;;
+        *) md_file="$1"; shift ;;
+      esac
+    done
+    params="{\"file\":\"$md_file\""
+    [[ -n "$md_direction" ]] && params="${params},\"direction\":\"$md_direction\""
+    params="${params}}"
+    _cmux_json "markdown.open" "$params"
     ;;
 
   # ── Themes ──

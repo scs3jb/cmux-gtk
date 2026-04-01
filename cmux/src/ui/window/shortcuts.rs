@@ -27,6 +27,7 @@ pub(super) fn setup_shortcuts(
     notif_page: &adw::NavigationPage,
     showing_notifications: &Rc<Cell<bool>>,
     notif_panel: &notifications_panel::NotificationsPanel,
+    header: &adw::HeaderBar,
 ) {
     let controller = gtk4::EventControllerKey::new();
 
@@ -42,6 +43,7 @@ pub(super) fn setup_shortcuts(
     let notif_page = notif_page.clone();
     let showing_notifications = showing_notifications.clone();
     let notif_panel = notif_panel.clone();
+    let header = header.clone();
     let window_weak = window.downgrade();
 
     controller.connect_key_pressed(move |_controller, keyval, _keycode, modifier| {
@@ -180,6 +182,15 @@ pub(super) fn setup_shortcuts(
                 state
                     .shared
                     .send_ui_event(crate::app::UiEvent::ReloadConfig);
+                glib::Propagation::Stop
+            }
+            // Ctrl+Shift+B: Toggle minimal mode (hide/show titlebar)
+            (gdk4::Key::b, true, true) => {
+                let visible = !header.is_visible();
+                header.set_visible(visible);
+                let mut settings = crate::settings::load();
+                settings.minimal_mode = !visible;
+                let _ = crate::settings::save(&settings);
                 glib::Propagation::Stop
             }
             // Ctrl+F: Toggle terminal find

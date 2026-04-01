@@ -661,6 +661,7 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
                 remote_ssh_enabled: remote_ssh_row.is_active(),
                 persist_scrollback: current_settings.persist_scrollback,
                 shortcuts: shortcuts_state.borrow().clone(),
+                minimal_mode: current_settings.minimal_mode,
             };
 
             if let Err(e) = settings::save(&new_settings) {

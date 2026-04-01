@@ -242,6 +242,8 @@ pub enum UiEvent {
         panel_id: Uuid,
     },
     ToggleNotifications,
+    #[allow(dead_code)]
+    ToggleMinimalMode,
     RenameTab {
         panel_id: Uuid,
     },

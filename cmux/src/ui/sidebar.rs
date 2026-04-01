@@ -90,6 +90,32 @@ pub fn create_sidebar(state: &Rc<AppState>) -> SidebarWidgets {
 
     refresh_sidebar(&list_box, state);
 
+    // Double-click on empty sidebar space creates a new workspace
+    let dbl_click = gtk4::GestureClick::new();
+    dbl_click.set_button(1);
+    {
+        let state = state.clone();
+        let list_box_weak = list_box.downgrade();
+        dbl_click.connect_pressed(move |gesture, n_press, _x, y| {
+            if n_press != 2 {
+                return;
+            }
+            let Some(list_box) = list_box_weak.upgrade() else {
+                return;
+            };
+            // Only fire if no row is under the cursor (clicked empty space)
+            if list_box.row_at_y(y as i32).is_none() {
+                gesture.set_state(gtk4::EventSequenceState::Claimed);
+                let workspace = crate::model::Workspace::new();
+                let placement = crate::settings::load().new_workspace_placement;
+                lock_or_recover(&state.shared.tab_manager)
+                    .add_workspace_with_placement(workspace, placement);
+                state.shared.notify_ui_refresh();
+            }
+        });
+    }
+    list_box.add_controller(dbl_click);
+
     scrolled.set_child(Some(&list_box));
     sidebar_box.append(&scrolled);
 

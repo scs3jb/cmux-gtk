@@ -85,6 +85,12 @@ pub fn create_window(
     // Toast overlay must be created before binding events so it can be passed in
     let toast_overlay = adw::ToastOverlay::new();
 
+    let header = adw::HeaderBar::new();
+    // Minimal mode: hide the header bar for a distraction-free terminal.
+    if crate::settings::load().minimal_mode {
+        header.set_visible(false);
+    }
+
     bind_sidebar_selection(&list_box, &content_box, state);
     event_handler::bind_shared_state_updates(
         &list_box,
@@ -98,9 +104,8 @@ pub fn create_window(
         &showing_notifications,
         &notif_panel,
         &toast_overlay,
+        &header,
     );
-
-    let header = adw::HeaderBar::new();
     let initial_title = {
         let tm = lock_or_recover(&state.shared.tab_manager);
         tm.selected()
@@ -198,6 +203,7 @@ pub fn create_window(
         &notif_page,
         &showing_notifications,
         &notif_panel,
+        &header,
     );
 
     {

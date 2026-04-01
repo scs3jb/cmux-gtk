@@ -22,6 +22,7 @@ pub(super) fn bind_shared_state_updates(
     showing_notifications: &Rc<Cell<bool>>,
     notif_panel: &notifications_panel::NotificationsPanel,
     toast_overlay: &adw::ToastOverlay,
+    header: &adw::HeaderBar,
 ) {
     let state = state.clone();
     let list_box = list_box.clone();
@@ -33,6 +34,7 @@ pub(super) fn bind_shared_state_updates(
     let showing_notifications = showing_notifications.clone();
     let notif_panel = notif_panel.clone();
     let toast_overlay = toast_overlay.clone();
+    let header = header.clone();
 
     // Debounce flag: prevents scheduling multiple idle callbacks for
     // metadata-only refreshes (SetTitle/SetPwd).  Cleared inside the callback.
@@ -152,6 +154,13 @@ pub(super) fn bind_shared_state_updates(
                             surface.binding_action("clear_screen");
                             surface.refresh();
                         }
+                    }
+                    UiEvent::ToggleMinimalMode => {
+                        let visible = !header.is_visible();
+                        header.set_visible(visible);
+                        let mut settings = crate::settings::load();
+                        settings.minimal_mode = !visible;
+                        let _ = crate::settings::save(&settings);
                     }
                     UiEvent::ToggleNotifications => {
                         if showing_notifications.get() {
@@ -737,7 +746,8 @@ fn event_refresh_kind(event: &UiEvent) -> RefreshKind {
         | UiEvent::ReadText { .. }
         | UiEvent::RefreshSurface { .. }
         | UiEvent::ClearHistory { .. }
-        | UiEvent::TriggerFlash { .. } => RefreshKind::None,
+        | UiEvent::TriggerFlash { .. }
+        | UiEvent::ToggleMinimalMode => RefreshKind::None,
 
         // Everything else may require a full layout rebuild.
         _ => RefreshKind::Full,
