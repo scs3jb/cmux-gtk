@@ -443,6 +443,14 @@ pub struct SidebarDisplaySettings {
     pub tint_color_light: String,
     /// Sidebar tint color for dark mode. Overrides `tint_color` when in dark mode.
     pub tint_color_dark: String,
+    /// When true, port badge clicks open localhost URLs in the system browser
+    /// instead of the cmux built-in browser panel.
+    pub port_link_external: bool,
+    /// Custom CSS color for the selected workspace row background.
+    /// Empty string means use the default accent color.
+    pub selection_color: String,
+    /// When true, use the ghostty terminal background color as the sidebar background tint.
+    pub match_terminal_background: bool,
 }
 
 impl Default for SidebarDisplaySettings {
@@ -463,6 +471,9 @@ impl Default for SidebarDisplaySettings {
             tint_color: String::new(),
             tint_color_light: String::new(),
             tint_color_dark: String::new(),
+            port_link_external: false,
+            selection_color: String::new(),
+            match_terminal_background: false,
         }
     }
 }

@@ -645,6 +645,9 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
                     tint_color: current_settings.sidebar.tint_color.clone(),
                     tint_color_light: current_settings.sidebar.tint_color_light.clone(),
                     tint_color_dark: current_settings.sidebar.tint_color_dark.clone(),
+                    port_link_external: current_settings.sidebar.port_link_external,
+                    selection_color: current_settings.sidebar.selection_color.clone(),
+                    match_terminal_background: current_settings.sidebar.match_terminal_background,
                 },
                 browser: BrowserSettings {
                     search_engine: SearchEngine::from_index(engine_row.selected()),

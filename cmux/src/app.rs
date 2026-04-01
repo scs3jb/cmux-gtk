@@ -1031,6 +1031,24 @@ pub fn apply_theme_from_settings() {
             }
         }
     }
+
+    // Apply custom sidebar selection color if set (overrides theme default)
+    let sel = &settings.sidebar.selection_color;
+    if !sel.is_empty() {
+        let css = format!(
+            ".navigation-sidebar row:selected {{ background-color: {sel}; }}\n\
+             .navigation-sidebar row:selected .workspace-title {{ color: inherit; }}\n\
+             .navigation-sidebar row:selected .dim-label,\n\
+             .navigation-sidebar row:selected .caption {{ color: alpha(currentColor, 0.8); }}\n"
+        );
+        let provider = gtk4::CssProvider::new();
+        provider.load_from_data(&css);
+        gtk4::style_context_add_provider_for_display(
+            &display,
+            &provider,
+            gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION + 2,
+        );
+    }
 }
 
 /// Initialize the ghostty embedded runtime and store it in AppState.
@@ -1079,6 +1097,17 @@ pub fn apply_ghostty_css(config: &crate::ghostty_config::GhosttyUiConfig) {
     };
 
     let mut css = String::new();
+
+    // Match sidebar background to terminal background color when enabled
+    let settings = crate::settings::load();
+    if settings.sidebar.match_terminal_background {
+        if let Some(ref hex) = config.background_hex() {
+            css += &format!(
+                "@define-color sidebar_bg_color {hex};\n\
+                 @define-color sidebar_backdrop_color {hex};\n"
+            );
+        }
+    }
 
     if let Some((r, g, b)) = config.split_divider_color {
         let hex = format!(

@@ -446,6 +446,7 @@ impl LayoutNode {
                                 "type": format!("{:?}", p.panel_type).to_lowercase(),
                                 "title": p.display_title(),
                                 "directory": p.directory,
+                                "tty": p.tty_name,
                             })
                         })
                     })

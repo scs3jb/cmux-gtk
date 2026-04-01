@@ -410,7 +410,9 @@ fn create_workspace_row(
             .collect();
         if branches.len() > 1 || (branches.len() == 1 && workspace.git_branch.is_some()) {
             let branch_box = gtk4::Box::new(gtk4::Orientation::Vertical, 1);
-            for panel in workspace.panels.values() {
+            let mut sorted_panels: Vec<_> = workspace.panels.iter().collect();
+            sorted_panels.sort_by_key(|(id, _)| *id);
+            for (_, panel) in sorted_panels {
                 if let Some(ref gb) = panel.git_branch {
                     let panel_title = panel
                         .custom_title
@@ -577,7 +579,7 @@ fn create_workspace_row(
                 let port_label = gtk4::Label::new(Some(&format!(":{port}")));
                 port_label.add_css_class("port-badge");
                 port_label.add_css_class("caption");
-                // Click to open localhost:PORT in a browser panel
+                // Click to open localhost:PORT (internal browser or xdg-open)
                 let url = format!("http://localhost:{port}");
                 let gesture = gtk4::GestureClick::new();
                 gesture.set_button(1);
@@ -585,9 +587,13 @@ fn create_workspace_row(
                     let state = state.clone();
                     gesture.connect_pressed(move |gesture, _, _, _| {
                         gesture.set_state(gtk4::EventSequenceState::Claimed);
-                        state.shared.send_ui_event(crate::app::UiEvent::OpenUrlInBrowser {
-                            url: url.clone(),
-                        });
+                        if crate::settings::load().sidebar.port_link_external {
+                            let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
+                        } else {
+                            state.shared.send_ui_event(crate::app::UiEvent::OpenUrlInBrowser {
+                                url: url.clone(),
+                            });
+                        }
                     });
                 }
                 port_label.set_can_focus(false);
