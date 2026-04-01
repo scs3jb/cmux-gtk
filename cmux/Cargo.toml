@@ -7,7 +7,7 @@ description = "cmux terminal multiplexer for Linux (GTK4/libadwaita)"
 [features]
 default = ["webkit"]
 link-ghostty = ["ghostty-gtk/link-ghostty"]
-webkit = ["dep:webkit6", "dep:pulldown-cmark"]
+webkit = ["dep:webkit6", "dep:pulldown-cmark", "dep:soup3"]
 
 [[bin]]
 name = "cmux-app"
@@ -33,6 +33,7 @@ thiserror = { workspace = true }
 libc = "0.2"
 base64 = "0.22"
 webkit6 = { workspace = true, optional = true }
+soup3 = { workspace = true, optional = true }
 pulldown-cmark = { workspace = true, optional = true }
 shell-escape = "0.1.5"
 hmac = { workspace = true }

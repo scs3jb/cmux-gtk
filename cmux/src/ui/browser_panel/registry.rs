@@ -76,7 +76,7 @@ pub(super) struct DialogHandler {
 /// Shared persistent NetworkSession — cookies and storage persist across panels and restarts.
 /// Data stored at `~/.local/share/cmux/webkit/`.
 #[allow(dead_code)] // available for WebView creation
-pub(super) fn shared_network_session() -> webkit6::NetworkSession {
+pub(crate) fn shared_network_session() -> webkit6::NetworkSession {
     thread_local! {
         static SESSION: RefCell<Option<webkit6::NetworkSession>> = const { RefCell::new(None) };
     }

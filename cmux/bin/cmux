@@ -366,7 +366,27 @@ case "$command" in
     _cmux_send "send ${*}"
     ;;
   send-key)
-    _cmux_send "send_key ${1:-}"
+    # Parse modifier+key syntax: ctrl+enter, shift+tab, ctrl+shift+c, arrow keys, etc.
+    raw_key="${1:-}"
+    key_mods='[]'
+    key_name="$raw_key"
+    # Split on '+' to extract modifiers (last token is the key)
+    IFS='+' read -ra key_parts <<< "$raw_key"
+    if [[ ${#key_parts[@]} -gt 1 ]]; then
+      key_name="${key_parts[-1]}"
+      mods_json=""
+      for (( i=0; i < ${#key_parts[@]}-1; i++ )); do
+        mod="${key_parts[$i]}"
+        case "${mod,,}" in
+          ctrl|control) mods_json="${mods_json}\"ctrl\"," ;;
+          shift)        mods_json="${mods_json}\"shift\"," ;;
+          alt|opt)      mods_json="${mods_json}\"alt\"," ;;
+          super|meta)   mods_json="${mods_json}\"super\"," ;;
+        esac
+      done
+      key_mods="[${mods_json%,}]"
+    fi
+    _cmux_json "surface.send_key" "{\"key\":\"${key_name}\",\"mods\":${key_mods}}"
     ;;
   split)
     _cmux_send "split ${*}"
@@ -493,6 +513,41 @@ case "$command" in
         exit 1
         ;;
     esac
+    ;;
+
+  # ── OpenCode / oh-my-opencode integration ──
+  omo)
+    if ! command -v opencode >/dev/null 2>&1; then
+      echo "error: opencode not found in PATH" >&2
+      echo "Install it first:  npm install -g opencode-ai  # or: bun install -g opencode-ai" >&2
+      exit 1
+    fi
+    # Create tmux shim directory
+    omo_shim_dir="${HOME}/.cmuxterm/cmux-omo-bin"
+    mkdir -p "$omo_shim_dir"
+    # Shim: intercept tmux calls and route through cmux __tmux-compat
+    cat > "$omo_shim_dir/tmux" <<'SHIMEOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  -V|-v) echo "tmux 3.4"; exit 0 ;;
+esac
+exec "${CMUX_OMO_CMUX_BIN:-cmux}" __tmux-compat "$@"
+SHIMEOF
+    chmod +x "$omo_shim_dir/tmux"
+    export CMUX_OMO_CMUX_BIN="${0}"
+    export PATH="${omo_shim_dir}:${PATH}"
+    [[ -z "${OPENCODE_PORT:-}" ]] && export OPENCODE_PORT="4096"
+    # Check if --port already in args
+    has_port=false
+    for _arg in "$@"; do
+      [[ "$_arg" == "--port" || "$_arg" == --port=* ]] && has_port=true && break
+    done
+    if $has_port; then
+      exec opencode "$@"
+    else
+      exec opencode --port "${OPENCODE_PORT}" "$@"
+    fi
     ;;
 
   # ── Tmux compatibility layer ──────────────────────────────────────

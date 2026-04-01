@@ -1,6 +1,8 @@
 mod app;
 mod browser_history;
 #[cfg(feature = "webkit")]
+mod browser_import;
+#[cfg(feature = "webkit")]
 mod browser_profiles;
 mod ghostty_config;
 mod model;

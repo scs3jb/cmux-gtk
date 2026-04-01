@@ -316,6 +316,46 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
     browser_group.add(&browser_theme_row);
 
     browser_page.add(&browser_group);
+
+    // ── Browser data import ──
+    #[cfg(feature = "webkit")]
+    {
+        let import_group = adw::PreferencesGroup::new();
+        import_group.set_title("Import Browser Data");
+        import_group.set_description(Some("Import cookies from another browser. Requires sqlite3 to be installed."));
+
+        for (label, source) in [
+            ("Import from Firefox", crate::browser_import::ImportSource::Firefox),
+            ("Import from Chrome", crate::browser_import::ImportSource::Chrome),
+            ("Import from Chromium", crate::browser_import::ImportSource::Chromium),
+        ] {
+            let row = adw::ActionRow::new();
+            row.set_title(label);
+            let btn = gtk4::Button::new();
+            btn.set_label("Import");
+            btn.set_valign(gtk4::Align::Center);
+            btn.add_css_class("pill");
+            {
+                let window_ref = window.downgrade();
+                btn.connect_clicked(move |_| {
+                    let (count, err) = crate::browser_import::import_from(source);
+                    let Some(win) = window_ref.upgrade() else { return; };
+                    let (title, body) = if let Some(e) = err {
+                        ("Import Failed".to_string(), e)
+                    } else {
+                        ("Import Complete".to_string(), format!("Imported {count} cookies."))
+                    };
+                    let dialog = libadwaita::MessageDialog::new(Some(&win), Some(&title), Some(&body));
+                    dialog.add_response("ok", "OK");
+                    dialog.present();
+                });
+            }
+            row.add_suffix(&btn);
+            import_group.add(&row);
+        }
+        browser_page.add(&import_group);
+    }
+
     window.add(&browser_page);
 
     // ── Socket page ──
