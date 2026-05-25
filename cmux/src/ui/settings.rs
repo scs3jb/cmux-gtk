@@ -809,6 +809,7 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
                 workspace_cwd_inheritance: cwd_inherit_row.is_active(),
                 plus_button_action: PlusButtonAction::from_index(plus_btn_row.selected()),
                 split_ratio_persist: split_ratio_persist_row.is_active(),
+                agent_restore: current_settings.agent_restore.clone(),
                 shortcuts: shortcuts_state.borrow().clone(),
                 minimal_mode: current_settings.minimal_mode,
             };

@@ -96,6 +96,10 @@ pub struct SessionPanelSnapshot {
     pub tty_name: Option<String>,
     #[serde(default)]
     pub command: Option<String>,
+    /// Resume command to use when restoring an agent session (e.g. "claude --resume").
+    /// Populated at save time when an agent process is detected running in this panel.
+    #[serde(default)]
+    pub agent_resume_command: Option<String>,
     pub terminal: Option<SessionTerminalPanelSnapshot>,
     pub browser: Option<SessionBrowserPanelSnapshot>,
     pub markdown: Option<SessionMarkdownPanelSnapshot>,
@@ -202,6 +206,60 @@ impl SessionWorkspaceLayoutSnapshot {
     }
 }
 
+/// Detect whether a terminal panel is running a known AI agent CLI, and return
+/// the appropriate resume command if so.
+///
+/// Detection checks both the process title (updated by SET_TITLE actions from the
+/// terminal) and the panel's stored command (used when the panel was launched with
+/// an explicit command).  The title takes precedence since it reflects the live
+/// process name.
+///
+/// Recognised agents and their resume commands:
+/// - Claude Code: `claude --resume`
+/// - Codex CLI:   `codex`
+/// - OpenCode:    `opencode --resume`
+/// - Gemini CLI:  `gemini`  (stateless; no explicit resume flag)
+/// - Rovo Dev:    `rovo dev`
+pub fn detect_agent_resume_command(
+    title: Option<&str>,
+    command: Option<&str>,
+) -> Option<String> {
+    // Build a single string to search: "<title> <command>" (lowercase).
+    let haystack = {
+        let mut s = String::new();
+        if let Some(t) = title {
+            s.push_str(&t.to_lowercase());
+        }
+        if let Some(c) = command {
+            if !s.is_empty() {
+                s.push(' ');
+            }
+            s.push_str(&c.to_lowercase());
+        }
+        s
+    };
+
+    if haystack.is_empty() {
+        return None;
+    }
+
+    // Match against known agent binary/process names.  The patterns are kept
+    // intentionally simple — substring match is enough for process titles.
+    if haystack.contains("claude") {
+        Some("claude --resume".to_string())
+    } else if haystack.contains("opencode") {
+        Some("opencode --resume".to_string())
+    } else if haystack.contains("codex") {
+        Some("codex".to_string())
+    } else if haystack.contains("gemini") {
+        Some("gemini".to_string())
+    } else if haystack.contains("rovo") {
+        Some("rovo dev".to_string())
+    } else {
+        None
+    }
+}
+
 impl SessionPanelSnapshot {
     /// Convert from a model Panel.
     pub fn from_panel(panel: &crate::model::panel::Panel) -> Self {
@@ -209,6 +267,13 @@ impl SessionPanelSnapshot {
             crate::model::PanelType::Terminal => "terminal".to_string(),
             crate::model::PanelType::Browser => "browser".to_string(),
             crate::model::PanelType::Markdown => "markdown".to_string(),
+        };
+
+        // Detect agent resume command from live process title and stored command.
+        let agent_resume_command = if panel.panel_type == crate::model::PanelType::Terminal {
+            detect_agent_resume_command(panel.title.as_deref(), panel.command.as_deref())
+        } else {
+            None
         };
 
         Self {
@@ -223,6 +288,7 @@ impl SessionPanelSnapshot {
             listening_ports: panel.listening_ports.clone(),
             tty_name: panel.tty_name.clone(),
             command: panel.command.clone(),
+            agent_resume_command,
             terminal: if panel.panel_type == crate::model::PanelType::Terminal {
                 Some(SessionTerminalPanelSnapshot {
                     working_directory: panel.directory.clone(),
@@ -254,5 +320,106 @@ impl SessionPanelSnapshot {
                 None
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_detect_agent_resume_claude_by_title() {
+        assert_eq!(
+            detect_agent_resume_command(Some("claude"), None),
+            Some("claude --resume".to_string())
+        );
+    }
+
+    #[test]
+    fn test_detect_agent_resume_claude_code_by_command() {
+        assert_eq!(
+            detect_agent_resume_command(None, Some("claude")),
+            Some("claude --resume".to_string())
+        );
+    }
+
+    #[test]
+    fn test_detect_agent_resume_opencode() {
+        assert_eq!(
+            detect_agent_resume_command(Some("opencode"), None),
+            Some("opencode --resume".to_string())
+        );
+    }
+
+    #[test]
+    fn test_detect_agent_resume_codex() {
+        assert_eq!(
+            detect_agent_resume_command(Some("codex"), None),
+            Some("codex".to_string())
+        );
+    }
+
+    #[test]
+    fn test_detect_agent_resume_gemini() {
+        assert_eq!(
+            detect_agent_resume_command(Some("gemini"), None),
+            Some("gemini".to_string())
+        );
+    }
+
+    #[test]
+    fn test_detect_agent_resume_rovo() {
+        assert_eq!(
+            detect_agent_resume_command(Some("rovo dev"), None),
+            Some("rovo dev".to_string())
+        );
+    }
+
+    #[test]
+    fn test_detect_agent_resume_none_for_plain_shell() {
+        assert_eq!(detect_agent_resume_command(Some("zsh"), None), None);
+        assert_eq!(detect_agent_resume_command(Some("bash"), None), None);
+        assert_eq!(
+            detect_agent_resume_command(Some("vim"), Some("vim")),
+            None
+        );
+    }
+
+    #[test]
+    fn test_detect_agent_resume_none_for_empty() {
+        assert_eq!(detect_agent_resume_command(None, None), None);
+        assert_eq!(detect_agent_resume_command(Some(""), Some("")), None);
+    }
+
+    #[test]
+    fn test_detect_agent_resume_case_insensitive() {
+        assert_eq!(
+            detect_agent_resume_command(Some("Claude Code"), None),
+            Some("claude --resume".to_string())
+        );
+        assert_eq!(
+            detect_agent_resume_command(Some("CODEX"), None),
+            Some("codex".to_string())
+        );
+    }
+
+    #[test]
+    fn test_agent_resume_command_serde_default() {
+        // Snapshots without agentResumeCommand (old sessions) should deserialize fine
+        let json = r#"{
+            "id": "00000000-0000-0000-0000-000000000001",
+            "type": "terminal",
+            "title": null,
+            "customTitle": null,
+            "directory": null,
+            "isPinned": false,
+            "isManuallyUnread": false,
+            "gitBranch": null,
+            "listeningPorts": [],
+            "ttyName": null
+        }"#;
+        let snap: SessionPanelSnapshot = serde_json::from_str(json).unwrap();
+        assert_eq!(snap.agent_resume_command, None);
+        assert_eq!(snap.command, None);
     }
 }

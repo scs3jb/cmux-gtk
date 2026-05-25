@@ -692,6 +692,9 @@ fn restore_session(state: &Rc<AppState>) -> Vec<Uuid> {
         );
     }
 
+    // Load per-agent restore toggle settings once before iterating panels.
+    let agent_restore_settings = crate::settings::load().agent_restore;
+
     // Build restored TabManager outside the lock to avoid blocking socket
     // handlers that need to read workspace state during startup.
     let mut restored_tm = TabManager::empty();
@@ -761,7 +764,24 @@ fn restore_session(state: &Rc<AppState>) -> Vec<Uuid> {
                         .markdown
                         .as_ref()
                         .map(|m| m.file_path.clone()),
-                    command: panel_snapshot.command.clone(),
+                    command: {
+                        // Prefer the agent resume command when one was detected at save time
+                        // and the per-agent toggle is enabled in settings.
+                        let agent_cmd = panel_snapshot
+                            .agent_resume_command
+                            .as_deref()
+                            .filter(|cmd| agent_restore_settings.is_enabled_for(cmd));
+                        if let Some(cmd) = agent_cmd {
+                            tracing::info!(
+                                panel_id = %panel_snapshot.id,
+                                cmd,
+                                "Restoring agent session with resume command"
+                            );
+                            Some(cmd.to_string())
+                        } else {
+                            panel_snapshot.command.clone()
+                        }
+                    },
                     pending_scrollback: panel_snapshot
                         .terminal
                         .as_ref()

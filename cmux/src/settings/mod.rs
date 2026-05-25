@@ -54,6 +54,8 @@ pub struct AppSettings {
     pub plus_button_action: PlusButtonAction,
     /// Persist split ratios (divider positions) in session.
     pub split_ratio_persist: bool,
+    /// Agent session restore settings.
+    pub agent_restore: AgentRestoreSettings,
     /// Keyboard shortcuts.
     #[serde(skip)]
     pub shortcuts: shortcuts::ShortcutConfig,
@@ -583,6 +585,58 @@ impl LinkRoutingSettings {
     }
 }
 
+/// Per-agent session restore toggles.
+///
+/// When a panel is restored and an agent resume command was detected at save time,
+/// cmux will use that command to re-launch the agent only if the corresponding
+/// toggle is enabled.  All agents default to enabled.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AgentRestoreSettings {
+    /// Restore Claude Code sessions on launch (`claude --resume`).
+    pub claude_code: bool,
+    /// Restore Codex CLI sessions on launch (`codex`).
+    pub codex: bool,
+    /// Restore OpenCode sessions on launch (`opencode --resume`).
+    pub opencode: bool,
+    /// Restore Gemini CLI sessions on launch (`gemini`).
+    pub gemini: bool,
+    /// Restore Rovo Dev sessions on launch (`rovo dev`).
+    pub rovo_dev: bool,
+}
+
+impl Default for AgentRestoreSettings {
+    fn default() -> Self {
+        Self {
+            claude_code: true,
+            codex: true,
+            opencode: true,
+            gemini: true,
+            rovo_dev: true,
+        }
+    }
+}
+
+impl AgentRestoreSettings {
+    /// Return `true` if the given agent resume command should be used on restore.
+    /// The `resume_cmd` is matched by prefix against the known agent commands.
+    pub fn is_enabled_for(&self, resume_cmd: &str) -> bool {
+        if resume_cmd.starts_with("claude") {
+            self.claude_code
+        } else if resume_cmd.starts_with("opencode") {
+            self.opencode
+        } else if resume_cmd.starts_with("codex") {
+            self.codex
+        } else if resume_cmd.starts_with("gemini") {
+            self.gemini
+        } else if resume_cmd.starts_with("rovo") {
+            self.rovo_dev
+        } else {
+            false
+        }
+    }
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -608,6 +662,7 @@ impl Default for AppSettings {
             workspace_cwd_inheritance: true,
             plus_button_action: PlusButtonAction::default(),
             split_ratio_persist: true,
+            agent_restore: AgentRestoreSettings::default(),
             shortcuts: shortcuts::ShortcutConfig::default(),
         }
     }
