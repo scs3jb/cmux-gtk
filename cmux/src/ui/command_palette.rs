@@ -260,6 +260,8 @@ fn build_actions(state: &Rc<AppState>) -> Rc<Vec<PaletteAction>> {
         cmd("font.decrease", "Decrease Font Size"),
         cmd("font.reset", "Reset Font Size"),
         cmd("task_manager.open", "Open Task Manager"),
+        cmd("settings.ghostty", "Ghostty Settings"),
+        cmd("settings.cmux", "cmux Settings"),
     ];
 
     // Add SSH workspace command if enabled in settings
@@ -468,6 +470,19 @@ fn which_exists(binary: &str) -> bool {
     std::env::var_os("PATH")
         .map(|paths| std::env::split_paths(&paths).any(|dir| dir.join(binary).is_file()))
         .unwrap_or(false)
+}
+
+/// Open a file path in the user's preferred editor.
+///
+/// Uses `$EDITOR` if set; falls back to `xdg-open` so the desktop chooses an
+/// appropriate application.
+fn open_in_editor(path: &std::path::Path) {
+    let editor = std::env::var("EDITOR").ok().filter(|e| !e.is_empty());
+    if let Some(editor) = editor {
+        let _ = std::process::Command::new(&editor).arg(path).spawn();
+    } else {
+        let _ = std::process::Command::new("xdg-open").arg(path).spawn();
+    }
 }
 
 fn execute_action(name: &str, state: &Rc<AppState>, on_refresh: &Rc<dyn Fn()>) {
@@ -890,6 +905,18 @@ fn execute_action(name: &str, state: &Rc<AppState>, on_refresh: &Rc<dyn Fn()>) {
                 }
             }
             return;
+        }
+        "settings.ghostty" => {
+            let path = dirs::home_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("~"))
+                .join(".config/ghostty/config");
+            open_in_editor(&path);
+            return; // Don't refresh — external command
+        }
+        "settings.cmux" => {
+            let path = crate::settings::active_config_path();
+            open_in_editor(&path);
+            return; // Don't refresh — external command
         }
         name if name.starts_with("workspace.select.") => {
             if let Ok(index) = name[17..].parse::<usize>() {

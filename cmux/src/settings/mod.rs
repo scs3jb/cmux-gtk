@@ -56,6 +56,10 @@ pub struct AppSettings {
     pub split_ratio_persist: bool,
     /// Agent session restore settings.
     pub agent_restore: AgentRestoreSettings,
+    /// Resume commands that are pre-approved and skip any confirmation dialog.
+    /// Any command whose prefix matches an entry here is launched without prompting.
+    #[serde(default = "default_resume_command_approvals")]
+    pub resume_command_approvals: Vec<String>,
     /// Keyboard shortcuts.
     #[serde(skip)]
     pub shortcuts: shortcuts::ShortcutConfig,
@@ -677,6 +681,28 @@ impl AgentRestoreSettings {
     }
 }
 
+fn default_resume_command_approvals() -> Vec<String> {
+    vec![
+        "claude --resume".to_string(),
+        "codex".to_string(),
+        "opencode --resume".to_string(),
+        "gemini".to_string(),
+        "rovo dev".to_string(),
+    ]
+}
+
+impl AppSettings {
+    /// Return `true` if `cmd` is in the pre-approved resume commands list.
+    ///
+    /// Matching is prefix-based so that `"codex"` matches `"codex --dir /foo"`.
+    #[allow(dead_code)]
+    pub fn is_resume_command_approved(&self, cmd: &str) -> bool {
+        self.resume_command_approvals
+            .iter()
+            .any(|approved| cmd == approved || cmd.starts_with(&format!("{approved} ")))
+    }
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -703,6 +729,7 @@ impl Default for AppSettings {
             plus_button_action: PlusButtonAction::default(),
             split_ratio_persist: true,
             agent_restore: AgentRestoreSettings::default(),
+            resume_command_approvals: default_resume_command_approvals(),
             shortcuts: shortcuts::ShortcutConfig::default(),
         }
     }
@@ -715,6 +742,19 @@ pub fn config_dir() -> PathBuf {
         .join("cmux")
 }
 
+/// Return the active config file path.
+///
+/// Prefers `~/.config/cmux/cmux.json`; falls back to `~/.config/cmux/settings.json`.
+pub fn active_config_path() -> PathBuf {
+    let dir = config_dir();
+    let cmux_json = dir.join("cmux.json");
+    if cmux_json.exists() {
+        cmux_json
+    } else {
+        dir.join("settings.json")
+    }
+}
+
 /// Load settings from disk. Returns defaults if file doesn't exist.
 pub fn load() -> AppSettings {
     let mut settings = load_main_settings();
@@ -723,6 +763,10 @@ pub fn load() -> AppSettings {
 }
 
 /// Save settings to disk.
+///
+/// Writes to `cmux.json` if that file exists (or if neither file exists, creating
+/// `cmux.json` as the canonical new format); writes to `settings.json` only when
+/// the user has a `settings.json` and no `cmux.json` (backward compatibility).
 pub fn save(settings: &AppSettings) -> Result<(), std::io::Error> {
     let dir = config_dir();
     std::fs::create_dir_all(&dir)?;
@@ -731,7 +775,7 @@ pub fn save(settings: &AppSettings) -> Result<(), std::io::Error> {
         let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
     }
 
-    let path = dir.join("settings.json");
+    let path = active_config_path();
     let json = serde_json::to_string_pretty(settings).map_err(std::io::Error::other)?;
     {
         use std::io::Write;
@@ -747,6 +791,75 @@ pub fn save(settings: &AppSettings) -> Result<(), std::io::Error> {
 
     shortcuts::save(&settings.shortcuts)?;
     Ok(())
+}
+
+/// Strip JSONC comments from a string, returning clean JSON.
+///
+/// Handles:
+/// - Line comments: `// ...` (not inside strings)
+/// - Block comments: `/* ... */` (not inside strings, may span multiple lines)
+/// - Strings with escaped quotes (`\"`) are tracked correctly.
+pub fn strip_jsonc_comments(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    let mut in_string = false;
+
+    while let Some(c) = chars.next() {
+        if in_string {
+            out.push(c);
+            if c == '\\' {
+                // Escaped character — consume next char verbatim to avoid treating
+                // `\"` as a string terminator.
+                if let Some(escaped) = chars.next() {
+                    out.push(escaped);
+                }
+            } else if c == '"' {
+                in_string = false;
+            }
+        } else {
+            match c {
+                '"' => {
+                    in_string = true;
+                    out.push(c);
+                }
+                '/' => match chars.peek() {
+                    Some('/') => {
+                        // Line comment — consume until end of line.
+                        chars.next();
+                        for ch in chars.by_ref() {
+                            if ch == '\n' {
+                                out.push('\n');
+                                break;
+                            }
+                        }
+                    }
+                    Some('*') => {
+                        // Block comment — consume until `*/`.
+                        chars.next();
+                        let mut prev = '\0';
+                        for ch in chars.by_ref() {
+                            if prev == '*' && ch == '/' {
+                                break;
+                            }
+                            // Preserve newlines so line numbers stay accurate for error messages.
+                            if ch == '\n' {
+                                out.push('\n');
+                            }
+                            prev = ch;
+                        }
+                    }
+                    _ => {
+                        out.push(c);
+                    }
+                },
+                _ => {
+                    out.push(c);
+                }
+            }
+        }
+    }
+
+    out
 }
 
 #[cfg(test)]
@@ -781,15 +894,62 @@ mod tests {
         assert_eq!(settings.theme, ThemeMode::Dark);
         assert!(settings.confirm_before_close); // default value
     }
+
+    #[test]
+    fn test_strip_jsonc_line_comment() {
+        let input = r#"{"key": "value"} // line comment"#;
+        let output = strip_jsonc_comments(input);
+        assert!(output.contains(r#""key": "value""#));
+        assert!(!output.contains("line comment"));
+    }
+
+    #[test]
+    fn test_strip_jsonc_block_comment() {
+        let input = r#"{"key": /* block */ "value"}"#;
+        let output = strip_jsonc_comments(input);
+        assert!(output.contains(r#""value""#));
+        assert!(!output.contains("block"));
+    }
+
+    #[test]
+    fn test_strip_jsonc_url_in_string_not_stripped() {
+        // `//` inside a string must NOT be treated as a line comment.
+        let input = r#"{"url": "http://example.com // not a comment"}"#;
+        let output = strip_jsonc_comments(input);
+        let v: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(
+            v["url"].as_str().unwrap(),
+            "http://example.com // not a comment"
+        );
+    }
+
+    #[test]
+    fn test_strip_jsonc_escaped_quote_in_string() {
+        let input = r#"{"msg": "he said \"hello\" // not comment"}"#;
+        let output = strip_jsonc_comments(input);
+        let v: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(v["msg"].as_str().unwrap(), r#"he said "hello" // not comment"#);
+    }
+
+    #[test]
+    fn test_strip_jsonc_multiline_block_comment() {
+        let input = "{\n  /* multi\n     line */\n  \"k\": 1\n}";
+        let output = strip_jsonc_comments(input);
+        let v: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(v["k"].as_i64().unwrap(), 1);
+    }
 }
 
 fn load_main_settings() -> AppSettings {
-    let path = config_dir().join("settings.json");
+    let path = active_config_path();
     match std::fs::read_to_string(&path) {
-        Ok(content) => serde_json::from_str(&content).unwrap_or_else(|err| {
-            tracing::warn!("Failed to parse {}: {err}", path.display());
-            AppSettings::default()
-        }),
+        Ok(content) => {
+            let clean = strip_jsonc_comments(&content);
+            serde_json::from_str(&clean).unwrap_or_else(|err| {
+                tracing::warn!("Failed to parse {}: {err}", path.display());
+                AppSettings::default()
+            })
+        }
         Err(_) => AppSettings::default(),
     }
 }

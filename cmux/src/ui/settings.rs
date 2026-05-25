@@ -1015,6 +1015,7 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
                     hermes: agent_hermes_row.is_active(),
                     antigravity: agent_antigravity_row.is_active(),
                 },
+                resume_command_approvals: current_settings.resume_command_approvals.clone(),
                 shortcuts: shortcuts_state.borrow().clone(),
                 minimal_mode: current_settings.minimal_mode,
             };

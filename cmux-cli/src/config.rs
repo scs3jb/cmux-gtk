@@ -5,17 +5,87 @@ use std::path::PathBuf;
 const DOCS_URL: &str =
     "https://github.com/douglas/cmux-gtk/blob/main/README.md";
 
-/// Return the path to the cmux settings.json file.
-fn settings_path() -> PathBuf {
-    dirs::config_dir()
+/// Return the active cmux config file path.
+///
+/// Prefers `~/.config/cmux/cmux.json`; falls back to `~/.config/cmux/settings.json`.
+fn active_config_path() -> PathBuf {
+    let dir = dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("~/.config"))
-        .join("cmux")
-        .join("settings.json")
+        .join("cmux");
+    let cmux_json = dir.join("cmux.json");
+    if cmux_json.exists() {
+        cmux_json
+    } else {
+        dir.join("settings.json")
+    }
 }
 
-/// `cmux config path` — print the config file path.
+/// Strip JSONC (JSON with comments) comments from `s`.
+///
+/// Handles `// line` and `/* block */` comments outside strings.
+fn strip_jsonc_comments(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    let mut in_string = false;
+
+    while let Some(c) = chars.next() {
+        if in_string {
+            out.push(c);
+            if c == '\\' {
+                if let Some(escaped) = chars.next() {
+                    out.push(escaped);
+                }
+            } else if c == '"' {
+                in_string = false;
+            }
+        } else {
+            match c {
+                '"' => {
+                    in_string = true;
+                    out.push(c);
+                }
+                '/' => match chars.peek() {
+                    Some('/') => {
+                        chars.next();
+                        for ch in chars.by_ref() {
+                            if ch == '\n' {
+                                out.push('\n');
+                                break;
+                            }
+                        }
+                    }
+                    Some('*') => {
+                        chars.next();
+                        let mut prev = '\0';
+                        for ch in chars.by_ref() {
+                            if prev == '*' && ch == '/' {
+                                break;
+                            }
+                            if ch == '\n' {
+                                out.push('\n');
+                            }
+                            prev = ch;
+                        }
+                    }
+                    _ => {
+                        out.push(c);
+                    }
+                },
+                _ => {
+                    out.push(c);
+                }
+            }
+        }
+    }
+
+    out
+}
+
+/// `cmux config path` — print the active config file path.
+///
+/// Prints `cmux.json` when it exists, otherwise `settings.json` (legacy).
 pub fn run_path() -> anyhow::Result<()> {
-    println!("{}", settings_path().display());
+    println!("{}", active_config_path().display());
     Ok(())
 }
 
@@ -27,7 +97,7 @@ pub fn run_docs() -> anyhow::Result<()> {
 
 /// `cmux config doctor` — validate the config file.
 pub fn run_doctor() -> anyhow::Result<()> {
-    let path = settings_path();
+    let path = active_config_path();
 
     // Check 1: file existence
     if !path.exists() {
@@ -39,7 +109,7 @@ pub fn run_doctor() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // Check 2: readable + valid JSON
+    // Check 2: readable + valid JSON/JSONC
     let content = match std::fs::read_to_string(&path) {
         Ok(c) => c,
         Err(e) => {
@@ -48,7 +118,8 @@ pub fn run_doctor() -> anyhow::Result<()> {
         }
     };
 
-    let value: serde_json::Value = match serde_json::from_str(&content) {
+    let clean = strip_jsonc_comments(&content);
+    let value: serde_json::Value = match serde_json::from_str(&clean) {
         Ok(v) => v,
         Err(e) => {
             println!("Invalid JSON in {}: {e}", path.display());
