@@ -114,6 +114,43 @@ impl NotificationStore {
         }
     }
 
+    /// Mark a notification as unread.
+    pub fn mark_unread(&mut self, id: Uuid) {
+        if let Some(n) = self.notifications.iter_mut().find(|n| n.id == id) {
+            n.is_read = false;
+        }
+    }
+
+    /// Remove a notification by ID. Returns true if it was found and removed.
+    pub fn dismiss(&mut self, id: Uuid) -> bool {
+        let before = self.notifications.len();
+        self.notifications.retain(|n| n.id != id);
+        self.notifications.len() < before
+    }
+
+    /// Get unread notifications for a specific workspace, ordered by timestamp (newest last).
+    #[allow(dead_code)]
+    pub fn unread_for_workspace(&self, workspace_id: Uuid) -> Vec<&Notification> {
+        self.notifications
+            .iter()
+            .filter(|n| !n.is_read && n.source_workspace_id == Some(workspace_id))
+            .collect()
+    }
+
+    /// Mark the most recent notification for a workspace as unread.
+    /// Returns the ID of the notification marked unread, if any.
+    pub fn mark_latest_unread_for_workspace(&mut self, workspace_id: Uuid) -> Option<Uuid> {
+        // Find the most recent notification (last in Vec, since we push in order)
+        let id = self
+            .notifications
+            .iter()
+            .rev()
+            .find(|n| n.source_workspace_id == Some(workspace_id))
+            .map(|n| n.id)?;
+        self.mark_unread(id);
+        Some(id)
+    }
+
     /// Clear all notifications.
     pub fn clear(&mut self) {
         self.notifications.clear();

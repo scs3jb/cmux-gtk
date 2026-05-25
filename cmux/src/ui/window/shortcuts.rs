@@ -51,6 +51,40 @@ pub(super) fn setup_shortcuts(
         let shift = modifier.contains(gdk4::ModifierType::SHIFT_MASK);
         let alt = modifier.contains(gdk4::ModifierType::ALT_MASK);
 
+        // Check user-configurable notification shortcuts (no default bindings).
+        {
+            let shortcuts = crate::settings::shortcuts::load();
+            let key_name = keyval.name().map(|n| n.to_string()).unwrap_or_default();
+            let configurable_actions = [
+                "notification.defer_unread",
+                "notification.toggle_unread",
+            ];
+            for action in &configurable_actions {
+                if let Some(binding) = shortcuts.get(action) {
+                    if binding.ctrl == ctrl
+                        && binding.shift == shift
+                        && binding.alt == alt
+                        && binding.key == key_name
+                    {
+                        match *action {
+                            "notification.defer_unread" => {
+                                state
+                                    .shared
+                                    .send_ui_event(crate::app::UiEvent::DeferUnread);
+                            }
+                            "notification.toggle_unread" => {
+                                state
+                                    .shared
+                                    .send_ui_event(crate::app::UiEvent::ToggleUnread);
+                            }
+                            _ => {}
+                        }
+                        return glib::Propagation::Stop;
+                    }
+                }
+            }
+        }
+
         // Alt+Arrow: Directional pane focus
         if alt && !ctrl && !shift {
             use crate::model::panel::Direction;

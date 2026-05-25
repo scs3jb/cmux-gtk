@@ -172,6 +172,45 @@ pub(super) fn bind_shared_state_updates(
                             showing_notifications.set(true);
                         }
                     }
+                    UiEvent::DeferUnread => {
+                        // Mark all unread notifications for the current workspace as read,
+                        // clearing the unread badge (defer effect without a timer).
+                        let workspace_id = {
+                            let tm = lock_or_recover(&state.shared.tab_manager);
+                            tm.selected().map(|ws| ws.id)
+                        };
+                        if let Some(workspace_id) = workspace_id {
+                            mark_workspace_read(&state, workspace_id);
+                            needs_metadata_refresh = true;
+                        }
+                    }
+                    UiEvent::ToggleUnread => {
+                        let workspace_id = {
+                            let tm = lock_or_recover(&state.shared.tab_manager);
+                            tm.selected().map(|ws| ws.id)
+                        };
+                        if let Some(workspace_id) = workspace_id {
+                            let has_unread = {
+                                let store = lock_or_recover(&state.shared.notifications);
+                                store.unread_count_for_workspace(workspace_id) > 0
+                            };
+                            if has_unread {
+                                // Mark all unread as read
+                                mark_workspace_read(&state, workspace_id);
+                            } else {
+                                // Mark most recent notification as unread again
+                                lock_or_recover(&state.shared.notifications)
+                                    .mark_latest_unread_for_workspace(workspace_id);
+                                // Bump the workspace unread count
+                                if let Some(ws) = lock_or_recover(&state.shared.tab_manager)
+                                    .workspace_mut(workspace_id)
+                                {
+                                    ws.unread_count = 1;
+                                }
+                            }
+                            needs_metadata_refresh = true;
+                        }
+                    }
                     UiEvent::RenameTab { panel_id } => {
                         if let Some(window) = window_weak.upgrade() {
                             super::dialogs::show_rename_tab_dialog(&window, &state, panel_id);
@@ -766,6 +805,9 @@ fn event_refresh_kind(event: &UiEvent) -> RefreshKind {
         UiEvent::SetTitle { .. }
         | UiEvent::SetPwd { .. }
         | UiEvent::DesktopNotification { .. } => RefreshKind::MetadataOnly,
+
+        // Notification shortcut events: only sidebar badge needs updating.
+        UiEvent::DeferUnread | UiEvent::ToggleUnread => RefreshKind::MetadataOnly,
 
         // No UI refresh — handled via dedicated callbacks or state only.
         UiEvent::StartSearch

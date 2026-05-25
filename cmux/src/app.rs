@@ -337,6 +337,12 @@ pub enum UiEvent {
         workspace_id: Uuid,
         state: crate::remote::session::RemoteState,
     },
+    /// Defer unread: mark all unread notifications for the current workspace as read
+    /// (effectively postponing the unread badge).
+    DeferUnread,
+    /// Toggle unread: if there are unread notifications for the current workspace,
+    /// mark them all read; otherwise mark the most recent one unread.
+    ToggleUnread,
 }
 
 /// Wrapper to send a raw ghostty_surface_t across threads.

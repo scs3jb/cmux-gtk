@@ -151,11 +151,21 @@ fn play_notification_sound(settings: &crate::settings::NotificationSettings) {
     }
 }
 
-pub(super) fn handle_notification_list(id: Value, state: &Arc<SharedState>) -> Response {
+pub(super) fn handle_notification_list(
+    id: Value,
+    params: &Value,
+    state: &Arc<SharedState>,
+) -> Response {
+    let unread_only = params
+        .get("unread")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
     let store = lock_or_recover(&state.notifications);
     let notifications: Vec<Value> = store
         .all()
         .iter()
+        .filter(|n| !unread_only || !n.is_read)
         .map(|n| {
             serde_json::json!({
                 "id": n.id.to_string(),
@@ -181,4 +191,100 @@ pub(super) fn handle_notification_clear(id: Value, state: &Arc<SharedState>) -> 
     lock_or_recover(&state.notifications).clear();
     state.notify_ui_refresh();
     Response::success(id, serde_json::json!({"ok": true}))
+}
+
+/// Parse a notification UUID from params["id"].
+fn parse_notification_id(params: &Value) -> Result<uuid::Uuid, Response> {
+    let s = params
+        .get("id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Response::error(Value::Null, "invalid_params", "Missing notification id"))?;
+    uuid::Uuid::parse_str(s)
+        .map_err(|_| Response::error(Value::Null, "invalid_params", "Invalid notification UUID"))
+}
+
+pub(super) fn handle_notification_mark_read(
+    id: Value,
+    params: &Value,
+    state: &Arc<SharedState>,
+) -> Response {
+    let notif_id = match parse_notification_id(params) {
+        Ok(v) => v,
+        Err(mut e) => {
+            e.id = id;
+            return e;
+        }
+    };
+    lock_or_recover(&state.notifications).mark_read(notif_id);
+    state.notify_ui_refresh();
+    Response::success(id, serde_json::json!({"ok": true}))
+}
+
+pub(super) fn handle_notification_dismiss(
+    id: Value,
+    params: &Value,
+    state: &Arc<SharedState>,
+) -> Response {
+    let notif_id = match parse_notification_id(params) {
+        Ok(v) => v,
+        Err(mut e) => {
+            e.id = id;
+            return e;
+        }
+    };
+    let removed = lock_or_recover(&state.notifications).dismiss(notif_id);
+    if !removed {
+        return Response::error(id, "not_found", "Notification not found");
+    }
+    state.notify_ui_refresh();
+    Response::success(id, serde_json::json!({"ok": true}))
+}
+
+pub(super) fn handle_notification_open(
+    id: Value,
+    params: &Value,
+    state: &Arc<SharedState>,
+) -> Response {
+    let notif_id = match parse_notification_id(params) {
+        Ok(v) => v,
+        Err(mut e) => {
+            e.id = id;
+            return e;
+        }
+    };
+
+    // Look up the notification and find its source workspace.
+    let workspace_id = {
+        let store = lock_or_recover(&state.notifications);
+        store
+            .all()
+            .iter()
+            .find(|n| n.id == notif_id)
+            .and_then(|n| n.source_workspace_id)
+    };
+
+    let Some(workspace_id) = workspace_id else {
+        return Response::error(id, "not_found", "Notification not found or has no source workspace");
+    };
+
+    // Select the workspace (focus it).
+    {
+        let mut tm = lock_or_recover(&state.tab_manager);
+        let Some(idx) = tm.workspace_index(workspace_id) else {
+            return Response::error(id, "not_found", "Source workspace no longer exists");
+        };
+        tm.select(idx);
+    }
+
+    // Mark the notification as read.
+    lock_or_recover(&state.notifications).mark_read(notif_id);
+
+    state.notify_ui_refresh();
+    Response::success(
+        id,
+        serde_json::json!({
+            "ok": true,
+            "workspace_id": workspace_id.to_string(),
+        }),
+    )
 }

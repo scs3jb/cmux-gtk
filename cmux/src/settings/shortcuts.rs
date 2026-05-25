@@ -225,6 +225,10 @@ impl Default for ShortcutConfig {
         // Reload ghostty configuration
         bindings.insert("config.reload".into(), Some(Keybinding::ctrl_shift("comma")));
 
+        // Notification shortcuts — no default key; users bind these manually.
+        bindings.insert("notification.defer_unread".into(), None);
+        bindings.insert("notification.toggle_unread".into(), None);
+
         Self { bindings }
     }
 }

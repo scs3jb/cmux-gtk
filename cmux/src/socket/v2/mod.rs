@@ -260,8 +260,15 @@ pub fn dispatch(json_line: &str, state: &Arc<SharedState>) -> Response {
         "notification.create_for_target" => {
             notification::handle_notification_create(id, &req.params, state)
         }
-        "notification.list" => notification::handle_notification_list(id, state),
+        "notification.list" => notification::handle_notification_list(id, &req.params, state),
         "notification.clear" => notification::handle_notification_clear(id, state),
+        "notification.mark_read" => {
+            notification::handle_notification_mark_read(id, &req.params, state)
+        }
+        "notification.dismiss" => {
+            notification::handle_notification_dismiss(id, &req.params, state)
+        }
+        "notification.open" => notification::handle_notification_open(id, &req.params, state),
 
         // Browser automation commands — delegated to socket::browser module
         #[cfg(feature = "webkit")]

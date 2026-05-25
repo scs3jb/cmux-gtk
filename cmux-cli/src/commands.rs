@@ -309,10 +309,29 @@ pub enum NotificationCommands {
         #[arg(long)]
         no_desktop: bool,
     },
-    /// List all notifications
-    List,
+    /// List notifications
+    List {
+        /// Only show unread notifications
+        #[arg(long)]
+        unread: bool,
+    },
     /// Clear all notifications
     Clear,
+    /// Mark a notification as read
+    MarkRead {
+        /// Notification UUID
+        id: String,
+    },
+    /// Dismiss (remove) a notification
+    Dismiss {
+        /// Notification UUID
+        id: String,
+    },
+    /// Open (focus) the source panel/workspace of a notification
+    Open {
+        /// Notification UUID
+        id: String,
+    },
 }
 
 #[derive(Subcommand)]

@@ -635,8 +635,23 @@ fn main() -> anyhow::Result<()> {
                     "surface": surface, "send_desktop": !no_desktop,
                 }),
             ),
-            NotificationCommands::List => ("notification.list", serde_json::json!({})),
+            NotificationCommands::List { unread } => (
+                "notification.list",
+                serde_json::json!({"unread": unread}),
+            ),
             NotificationCommands::Clear => ("notification.clear", serde_json::json!({})),
+            NotificationCommands::MarkRead { id } => (
+                "notification.mark_read",
+                serde_json::json!({"id": id}),
+            ),
+            NotificationCommands::Dismiss { id } => (
+                "notification.dismiss",
+                serde_json::json!({"id": id}),
+            ),
+            NotificationCommands::Open { id } => (
+                "notification.open",
+                serde_json::json!({"id": id}),
+            ),
         },
 
         Commands::Notify {

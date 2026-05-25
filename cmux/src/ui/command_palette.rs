@@ -180,6 +180,8 @@ fn shortcut_for_action(
         "settings.open" => "settings",
         "config.reload" => "config.reload",
         "notifications.toggle" => "notifications.toggle",
+        "notification.defer_unread" => "notification.defer_unread",
+        "notification.toggle_unread" => "notification.toggle_unread",
         "font.increase" => "font.increase",
         "font.decrease" => "font.decrease",
         "font.reset" => "font.reset",
@@ -244,6 +246,8 @@ fn build_actions(state: &Rc<AppState>) -> Rc<Vec<PaletteAction>> {
         cmd("tab.next_in_pane", "Next Tab in Pane"),
         cmd("tab.prev_in_pane", "Previous Tab in Pane"),
         cmd("notifications.toggle", "Show Notifications"),
+        cmd("notification.defer_unread", "Defer Unread Notifications"),
+        cmd("notification.toggle_unread", "Toggle Unread for Workspace"),
         cmd("workspace.open_folder", "Open Folder as Workspace..."),
         cmd("terminal.copy_mode", "Enter Copy Mode"),
         cmd("browser.reopen_closed", "Reopen Closed Browser Tab"),
@@ -728,6 +732,18 @@ fn execute_action(name: &str, state: &Rc<AppState>, on_refresh: &Rc<dyn Fn()>) {
             state
                 .shared
                 .send_ui_event(crate::app::UiEvent::ToggleNotifications);
+            return; // UiEvent handled
+        }
+        "notification.defer_unread" => {
+            state
+                .shared
+                .send_ui_event(crate::app::UiEvent::DeferUnread);
+            return; // UiEvent handled
+        }
+        "notification.toggle_unread" => {
+            state
+                .shared
+                .send_ui_event(crate::app::UiEvent::ToggleUnread);
             return; // UiEvent handled
         }
         "workspace.open_folder" => {
