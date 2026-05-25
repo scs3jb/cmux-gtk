@@ -125,6 +125,26 @@ impl AppState {
             }
         }
 
+        // When restoring a Claude Code session, forward Anthropic env vars so the
+        // child process inherits the caller's API key and config dir.
+        let anthropic_api_key = std::env::var("ANTHROPIC_API_KEY").ok();
+        let anthropic_base_url = std::env::var("ANTHROPIC_BASE_URL").ok();
+        let claude_config_dir = std::env::var("CLAUDE_CONFIG_DIR").ok();
+        let is_claude_command = command
+            .map(|c| c.starts_with("claude"))
+            .unwrap_or(false);
+        if is_claude_command {
+            if let Some(ref v) = anthropic_api_key {
+                env_vars.push(("ANTHROPIC_API_KEY", v));
+            }
+            if let Some(ref v) = anthropic_base_url {
+                env_vars.push(("ANTHROPIC_BASE_URL", v));
+            }
+            if let Some(ref v) = claude_config_dir {
+                env_vars.push(("CLAUDE_CONFIG_DIR", v));
+            }
+        }
+
         if let Some(app) = self.ghostty_app.borrow().as_ref() {
             gl_surface.initialize_with_env(app.raw(), working_directory, command, &env_vars);
         }

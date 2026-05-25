@@ -5,9 +5,8 @@ use libadwaita as adw;
 use libadwaita::prelude::*;
 
 use crate::settings::{
-    self, AppSettings, BrowserSettings, NewWorkspacePlacement, NotificationSound,
-    PlusButtonAction, SearchEngine, SidebarDisplaySettings, SidebarFocusStyle, SocketAccess,
-    ThemeMode,
+    self, AppSettings, BrowserSettings, NewWorkspacePlacement, NotificationSound, PlusButtonAction,
+    SearchEngine, SidebarDisplaySettings, SidebarFocusStyle, SocketAccess, ThemeMode,
 };
 
 /// Create and show the settings preferences window.
@@ -654,6 +653,87 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
     keyboard_page.add(&shortcuts_group);
     window.add(&keyboard_page);
 
+    // ── Agent Integrations page ──
+    let agents_page = adw::PreferencesPage::new();
+    agents_page.set_title("Agents");
+    agents_page.set_icon_name(Some("system-run-symbolic"));
+
+    let agents_group = adw::PreferencesGroup::new();
+    agents_group.set_title("Session Restore");
+    agents_group.set_description(Some(
+        "When cmux restarts, detected AI agent sessions are resumed automatically. \
+        Disable a toggle to use a plain shell instead.",
+    ));
+
+    let agent_claude_row = adw::SwitchRow::new();
+    agent_claude_row.set_title("Claude Code");
+    agent_claude_row.set_subtitle("Resume with `claude --resume`");
+    agent_claude_row.set_active(current_settings.agent_restore.claude_code);
+    agents_group.add(&agent_claude_row);
+
+    let agent_opencode_row = adw::SwitchRow::new();
+    agent_opencode_row.set_title("OpenCode");
+    agent_opencode_row.set_subtitle("Resume with `opencode --resume`");
+    agent_opencode_row.set_active(current_settings.agent_restore.opencode);
+    agents_group.add(&agent_opencode_row);
+
+    let agent_codex_row = adw::SwitchRow::new();
+    agent_codex_row.set_title("Codex CLI");
+    agent_codex_row.set_subtitle("Resume with `codex`");
+    agent_codex_row.set_active(current_settings.agent_restore.codex);
+    agents_group.add(&agent_codex_row);
+
+    let agent_gemini_row = adw::SwitchRow::new();
+    agent_gemini_row.set_title("Gemini CLI");
+    agent_gemini_row.set_subtitle("Resume with `gemini`");
+    agent_gemini_row.set_active(current_settings.agent_restore.gemini);
+    agents_group.add(&agent_gemini_row);
+
+    let agent_rovo_row = adw::SwitchRow::new();
+    agent_rovo_row.set_title("Rovo Dev");
+    agent_rovo_row.set_subtitle("Resume with `rovo dev`");
+    agent_rovo_row.set_active(current_settings.agent_restore.rovo_dev);
+    agents_group.add(&agent_rovo_row);
+
+    let agent_cursor_row = adw::SwitchRow::new();
+    agent_cursor_row.set_title("Cursor");
+    agent_cursor_row.set_subtitle("Resume with `cursor`");
+    agent_cursor_row.set_active(current_settings.agent_restore.cursor);
+    agents_group.add(&agent_cursor_row);
+
+    let agent_grok_row = adw::SwitchRow::new();
+    agent_grok_row.set_title("Grok Build CLI");
+    agent_grok_row.set_subtitle("Resume with `grok`");
+    agent_grok_row.set_active(current_settings.agent_restore.grok);
+    agents_group.add(&agent_grok_row);
+
+    let agent_amp_row = adw::SwitchRow::new();
+    agent_amp_row.set_title("Amp");
+    agent_amp_row.set_subtitle("Resume with `amp`");
+    agent_amp_row.set_active(current_settings.agent_restore.amp);
+    agents_group.add(&agent_amp_row);
+
+    let agent_pi_row = adw::SwitchRow::new();
+    agent_pi_row.set_title("Pi Vault");
+    agent_pi_row.set_subtitle("Resume with `pi`");
+    agent_pi_row.set_active(current_settings.agent_restore.pi);
+    agents_group.add(&agent_pi_row);
+
+    let agent_hermes_row = adw::SwitchRow::new();
+    agent_hermes_row.set_title("Hermes");
+    agent_hermes_row.set_subtitle("Resume with `hermes`");
+    agent_hermes_row.set_active(current_settings.agent_restore.hermes);
+    agents_group.add(&agent_hermes_row);
+
+    let agent_antigravity_row = adw::SwitchRow::new();
+    agent_antigravity_row.set_title("Antigravity");
+    agent_antigravity_row.set_subtitle("Resume with `antigravity`");
+    agent_antigravity_row.set_active(current_settings.agent_restore.antigravity);
+    agents_group.add(&agent_antigravity_row);
+
+    agents_page.add(&agents_group);
+    window.add(&agents_page);
+
     // ── About page ──
     let about_page = adw::PreferencesPage::new();
     about_page.set_title("About");
@@ -716,6 +796,17 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
         let plus_btn_row = plus_btn_row.clone();
         let split_ratio_persist_row = split_ratio_persist_row.clone();
         let copy_on_select_row = copy_on_select_row.clone();
+        let agent_claude_row = agent_claude_row.clone();
+        let agent_opencode_row = agent_opencode_row.clone();
+        let agent_codex_row = agent_codex_row.clone();
+        let agent_gemini_row = agent_gemini_row.clone();
+        let agent_rovo_row = agent_rovo_row.clone();
+        let agent_cursor_row = agent_cursor_row.clone();
+        let agent_grok_row = agent_grok_row.clone();
+        let agent_amp_row = agent_amp_row.clone();
+        let agent_pi_row = agent_pi_row.clone();
+        let agent_hermes_row = agent_hermes_row.clone();
+        let agent_antigravity_row = agent_antigravity_row.clone();
         window.connect_close_request(move |_| {
             let theme = match theme_row.selected() {
                 1 => ThemeMode::Light,
@@ -818,7 +909,19 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
                 workspace_cwd_inheritance: cwd_inherit_row.is_active(),
                 plus_button_action: PlusButtonAction::from_index(plus_btn_row.selected()),
                 split_ratio_persist: split_ratio_persist_row.is_active(),
-                agent_restore: current_settings.agent_restore.clone(),
+                agent_restore: settings::AgentRestoreSettings {
+                    claude_code: agent_claude_row.is_active(),
+                    opencode: agent_opencode_row.is_active(),
+                    codex: agent_codex_row.is_active(),
+                    gemini: agent_gemini_row.is_active(),
+                    rovo_dev: agent_rovo_row.is_active(),
+                    cursor: agent_cursor_row.is_active(),
+                    grok: agent_grok_row.is_active(),
+                    amp: agent_amp_row.is_active(),
+                    pi: agent_pi_row.is_active(),
+                    hermes: agent_hermes_row.is_active(),
+                    antigravity: agent_antigravity_row.is_active(),
+                },
                 shortcuts: shortcuts_state.borrow().clone(),
                 minimal_mode: current_settings.minimal_mode,
             };

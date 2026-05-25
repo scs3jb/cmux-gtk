@@ -607,6 +607,24 @@ pub struct AgentRestoreSettings {
     pub gemini: bool,
     /// Restore Rovo Dev sessions on launch (`rovo dev`).
     pub rovo_dev: bool,
+    /// Restore Cursor sessions on launch (`cursor`).
+    #[serde(default)]
+    pub cursor: bool,
+    /// Restore Grok Build CLI sessions on launch (`grok`).
+    #[serde(default)]
+    pub grok: bool,
+    /// Restore Amp sessions on launch (`amp`).
+    #[serde(default)]
+    pub amp: bool,
+    /// Restore Pi Vault sessions on launch (`pi`).
+    #[serde(default)]
+    pub pi: bool,
+    /// Restore Hermes sessions on launch (`hermes`).
+    #[serde(default)]
+    pub hermes: bool,
+    /// Restore Antigravity sessions on launch (`antigravity`).
+    #[serde(default)]
+    pub antigravity: bool,
 }
 
 impl Default for AgentRestoreSettings {
@@ -617,6 +635,12 @@ impl Default for AgentRestoreSettings {
             opencode: true,
             gemini: true,
             rovo_dev: true,
+            cursor: true,
+            grok: true,
+            amp: true,
+            pi: true,
+            hermes: true,
+            antigravity: true,
         }
     }
 }
@@ -635,6 +659,18 @@ impl AgentRestoreSettings {
             self.gemini
         } else if resume_cmd.starts_with("rovo") {
             self.rovo_dev
+        } else if resume_cmd.starts_with("cursor") {
+            self.cursor
+        } else if resume_cmd.starts_with("grok") {
+            self.grok
+        } else if resume_cmd.starts_with("amp") {
+            self.amp
+        } else if resume_cmd.starts_with("pi") {
+            self.pi
+        } else if resume_cmd.starts_with("hermes") {
+            self.hermes
+        } else if resume_cmd.starts_with("antigravity") {
+            self.antigravity
         } else {
             false
         }

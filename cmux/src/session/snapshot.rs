@@ -215,11 +215,17 @@ impl SessionWorkspaceLayoutSnapshot {
 /// process name.
 ///
 /// Recognised agents and their resume commands:
-/// - Claude Code: `claude --resume`
-/// - Codex CLI:   `codex`
-/// - OpenCode:    `opencode --resume`
-/// - Gemini CLI:  `gemini`  (stateless; no explicit resume flag)
-/// - Rovo Dev:    `rovo dev`
+/// - Claude Code:     `claude --resume`
+/// - Codex CLI:       `codex`
+/// - OpenCode:        `opencode --resume`
+/// - Gemini CLI:      `gemini`  (stateless; no explicit resume flag)
+/// - Rovo Dev:        `rovo dev`
+/// - Cursor:          `cursor`  (stateless IDE, just relaunch)
+/// - Grok Build CLI:  `grok`
+/// - Amp:             `amp`     (matched as whole word to avoid false positives)
+/// - Pi Vault:        `pi`      (matched when combined with "vault" or "ai")
+/// - Hermes:          `hermes`
+/// - Antigravity:     `antigravity`
 pub fn detect_agent_resume_command(
     title: Option<&str>,
     command: Option<&str>,
@@ -255,9 +261,56 @@ pub fn detect_agent_resume_command(
         Some("gemini".to_string())
     } else if haystack.contains("rovo") {
         Some("rovo dev".to_string())
+    } else if haystack.contains("cursor") {
+        Some("cursor".to_string())
+    } else if haystack.contains("grok") {
+        Some("grok".to_string())
+    } else if haystack.contains("antigravity") {
+        Some("antigravity".to_string())
+    } else if haystack.contains("hermes") {
+        Some("hermes".to_string())
+    } else if haystack.contains("pi vault")
+        || haystack.contains("pi ai")
+        || title.map(|t| t.to_lowercase() == "pi").unwrap_or(false)
+        || command.map(|c| c.to_lowercase() == "pi").unwrap_or(false)
+    {
+        Some("pi".to_string())
+    } else if is_word_match(&haystack, "amp") {
+        Some("amp".to_string())
     } else {
         None
     }
+}
+
+/// Check whether `word` appears as a whole word in `haystack` (lowercase).
+/// A word boundary is the start/end of string or a non-alphanumeric character.
+fn is_word_match(haystack: &str, word: &str) -> bool {
+    let mut start = 0;
+    while let Some(pos) = haystack[start..].find(word) {
+        let abs = start + pos;
+        let before_ok = abs == 0
+            || !haystack
+                .as_bytes()
+                .get(abs - 1)
+                .copied()
+                .map(|b| b.is_ascii_alphanumeric() || b == b'_')
+                .unwrap_or(false);
+        let after_ok = abs + word.len() >= haystack.len()
+            || !haystack
+                .as_bytes()
+                .get(abs + word.len())
+                .copied()
+                .map(|b| b.is_ascii_alphanumeric() || b == b'_')
+                .unwrap_or(false);
+        if before_ok && after_ok {
+            return true;
+        }
+        start = abs + 1;
+        if start >= haystack.len() {
+            break;
+        }
+    }
+    false
 }
 
 impl SessionPanelSnapshot {
@@ -372,6 +425,61 @@ mod tests {
         assert_eq!(
             detect_agent_resume_command(Some("rovo dev"), None),
             Some("rovo dev".to_string())
+        );
+    }
+
+    #[test]
+    fn test_detect_agent_resume_cursor() {
+        assert_eq!(
+            detect_agent_resume_command(Some("cursor"), None),
+            Some("cursor".to_string())
+        );
+    }
+
+    #[test]
+    fn test_detect_agent_resume_grok() {
+        assert_eq!(
+            detect_agent_resume_command(Some("grok"), None),
+            Some("grok".to_string())
+        );
+    }
+
+    #[test]
+    fn test_detect_agent_resume_amp_word_boundary() {
+        assert_eq!(
+            detect_agent_resume_command(Some("amp"), None),
+            Some("amp".to_string())
+        );
+        // "amp" inside a word should NOT match
+        assert_eq!(detect_agent_resume_command(Some("example"), None), None);
+        assert_eq!(detect_agent_resume_command(Some("ampersand"), None), None);
+    }
+
+    #[test]
+    fn test_detect_agent_resume_pi_vault() {
+        assert_eq!(
+            detect_agent_resume_command(Some("pi vault"), None),
+            Some("pi".to_string())
+        );
+        assert_eq!(
+            detect_agent_resume_command(None, Some("pi")),
+            Some("pi".to_string())
+        );
+    }
+
+    #[test]
+    fn test_detect_agent_resume_hermes() {
+        assert_eq!(
+            detect_agent_resume_command(Some("hermes"), None),
+            Some("hermes".to_string())
+        );
+    }
+
+    #[test]
+    fn test_detect_agent_resume_antigravity() {
+        assert_eq!(
+            detect_agent_resume_command(Some("antigravity"), None),
+            Some("antigravity".to_string())
         );
     }
 
