@@ -1016,6 +1016,7 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
                     antigravity: agent_antigravity_row.is_active(),
                 },
                 resume_command_approvals: current_settings.resume_command_approvals.clone(),
+                imessage_mode: current_settings.imessage_mode,
                 shortcuts: shortcuts_state.borrow().clone(),
                 minimal_mode: current_settings.minimal_mode,
             };

@@ -520,7 +520,7 @@ fn create_workspace_row(
                     .unwrap_or(std::cmp::Ordering::Equal),
             )
         });
-        for block in sorted.iter().take(3) {
+        for (i, block) in sorted.iter().take(3).enumerate() {
             let first_line = block.content.lines().next().unwrap_or(&block.content);
             let text = if block.key.is_empty() {
                 first_line.to_string()
@@ -528,12 +528,27 @@ fn create_workspace_row(
                 format!("[{}] {}", block.key, first_line)
             };
             let label = gtk4::Label::new(Some(&text));
-            label.set_halign(gtk4::Align::Start);
             label.set_wrap(false);
             label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
             label.add_css_class("caption");
-            label.add_css_class("dim-label");
-            outer.append(&label);
+            if workspace.imessage_mode {
+                // Alternate assistant/user alignment per block index
+                let (bubble_class, align) = if i % 2 == 0 {
+                    ("chat-bubble-assistant", gtk4::Align::End)
+                } else {
+                    ("chat-bubble-user", gtk4::Align::Start)
+                };
+                let bubble = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+                bubble.set_halign(align);
+                label.add_css_class(bubble_class);
+                label.set_halign(align);
+                bubble.append(&label);
+                outer.append(&bubble);
+            } else {
+                label.set_halign(gtk4::Align::Start);
+                label.add_css_class("dim-label");
+                outer.append(&label);
+            }
         }
     }
 
@@ -610,9 +625,39 @@ fn create_workspace_row(
         }
     }
 
-    // ── Latest log entry ──
+    // ── Log entries ──
     if !sidebar.hide_all_details && sidebar.show_logs {
-        if let Some(log_entry) = workspace.log_entries.last() {
+        if workspace.imessage_mode {
+            // iMessage mode: show up to 5 recent log entries as alternating bubbles
+            let entries: Vec<_> = workspace.log_entries.iter().rev().take(5).collect();
+            for (i, log_entry) in entries.into_iter().rev().enumerate() {
+                let log_text = if let Some(ref source) = log_entry.source {
+                    format!("[{}] {}", source, log_entry.message)
+                } else {
+                    log_entry.message.clone()
+                };
+                let log_label = gtk4::Label::new(Some(&log_text));
+                log_label.set_wrap(false);
+                log_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
+                log_label.add_css_class("caption");
+                // "error"/"warning" levels from shell = user side; progress/info = assistant side
+                let is_user_side = matches!(
+                    log_entry.level.as_str(),
+                    "warning" | "warn" | "error" | "info"
+                );
+                let (bubble_class, align) = if i % 2 == 0 || !is_user_side {
+                    ("chat-bubble-assistant", gtk4::Align::End)
+                } else {
+                    ("chat-bubble-user", gtk4::Align::Start)
+                };
+                log_label.add_css_class(bubble_class);
+                log_label.set_halign(align);
+                let bubble = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+                bubble.set_halign(align);
+                bubble.append(&log_label);
+                outer.append(&bubble);
+            }
+        } else if let Some(log_entry) = workspace.log_entries.last() {
             let log_text = if let Some(ref source) = log_entry.source {
                 format!("[{}] {}", source, log_entry.message)
             } else {

@@ -69,6 +69,9 @@ pub struct Workspace {
     pub remote_config: Option<crate::remote::session::RemoteConfig>,
     /// Remote connection state (None for local workspaces).
     pub remote_state: Option<crate::remote::session::RemoteState>,
+    /// When true, render log entries and metadata blocks as chat bubbles
+    /// (iMessage-style conversation layout) in the sidebar detail area.
+    pub imessage_mode: bool,
 }
 
 /// Individual PR check result.
@@ -186,6 +189,7 @@ impl Workspace {
             window_id: None,
             remote_config: None,
             remote_state: None,
+            imessage_mode: false,
         }
     }
 

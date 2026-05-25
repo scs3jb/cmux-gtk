@@ -89,7 +89,7 @@ fn main() -> anyhow::Result<()> {
 
     // Agent hook events may involve multiple socket calls; handle them before
     // the single-dispatch main match below.
-    if let Commands::Agent(AgentCommands::Hook { event, cli: agent_cli, message }) = &cli.command {
+    if let Commands::Agent(AgentCommands::Hook { event, cli: agent_cli, message, parent, panel }) = &cli.command {
         match event.as_str() {
             "session-start" => {
                 rpc::send_request(
@@ -127,9 +127,51 @@ fn main() -> anyhow::Result<()> {
                     cli.window.as_deref(),
                 )?;
             }
+            "subagent-start" => {
+                let parent_panel_id = match parent {
+                    Some(p) => p.clone(),
+                    None => {
+                        eprintln!("subagent-start requires --parent <panel_id>");
+                        std::process::exit(1);
+                    }
+                };
+                let resp = rpc::send_request(
+                    &cli.socket,
+                    "agent.spawn_subagent",
+                    serde_json::json!({
+                        "parent_panel_id": parent_panel_id,
+                        "cli_name": agent_cli,
+                    }),
+                    cli.window.as_deref(),
+                )?;
+                if cli.json {
+                    println!("{}", serde_json::to_string_pretty(&resp)?);
+                } else if let Some(pid) = resp.get("result").and_then(|r| r.get("panel_id")).and_then(|v| v.as_str()) {
+                    println!("{pid}");
+                } else {
+                    eprintln!("subagent-start failed: {:?}", resp.get("error"));
+                    std::process::exit(1);
+                }
+            }
+            "subagent-stop" => {
+                let panel_id = match panel {
+                    Some(p) => p.clone(),
+                    None => {
+                        eprintln!("subagent-stop requires --panel <panel_id>");
+                        std::process::exit(1);
+                    }
+                };
+                // Mark the panel as finished by closing it
+                rpc::send_request(
+                    &cli.socket,
+                    "pane.close",
+                    serde_json::json!({"panel": panel_id}),
+                    cli.window.as_deref(),
+                )?;
+            }
             other => {
                 eprintln!("Unknown agent hook event: {other}");
-                eprintln!("Valid events: session-start, session-stop, session-end, notification");
+                eprintln!("Valid events: session-start, session-stop, session-end, notification, subagent-start, subagent-stop");
                 std::process::exit(1);
             }
         }
@@ -144,6 +186,14 @@ fn main() -> anyhow::Result<()> {
         Commands::Agent(AgentCommands::Fork { message, name }) => (
             "agent.fork_conversation",
             serde_json::json!({"message": message, "workspace_name": name}),
+        ),
+        Commands::Agent(AgentCommands::SpawnSubagent { parent_panel_id, cli_name, working_directory }) => (
+            "agent.spawn_subagent",
+            serde_json::json!({
+                "parent_panel_id": parent_panel_id,
+                "cli_name": cli_name,
+                "working_directory": working_directory,
+            }),
         ),
         Commands::Ping => ("system.ping", serde_json::json!({})),
         Commands::Capabilities => ("system.capabilities", serde_json::json!({})),
@@ -566,6 +616,20 @@ fn main() -> anyhow::Result<()> {
                 "workspace.report_git_branch",
                 serde_json::json!({"branch": branch, "is_dirty": dirty}),
             ),
+            WorkspaceCommands::ImessageMode { enable, disable, workspace } => {
+                let enabled = if *enable {
+                    true
+                } else if *disable {
+                    false
+                } else {
+                    eprintln!("Provide --enable or --disable");
+                    std::process::exit(1);
+                };
+                (
+                    "workspace.set_imessage_mode",
+                    serde_json::json!({"enabled": enabled, "workspace": workspace}),
+                )
+            }
         },
 
         Commands::Surface(surf) => match surf {

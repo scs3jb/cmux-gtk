@@ -60,6 +60,10 @@ pub struct AppSettings {
     /// Any command whose prefix matches an entry here is launched without prompting.
     #[serde(default = "default_resume_command_approvals")]
     pub resume_command_approvals: Vec<String>,
+    /// When true, render workspace log entries and metadata blocks as iMessage-style
+    /// chat bubbles in the sidebar (applies globally; per-workspace toggle overrides).
+    #[serde(default)]
+    pub imessage_mode: bool,
     /// Keyboard shortcuts.
     #[serde(skip)]
     pub shortcuts: shortcuts::ShortcutConfig,
@@ -730,6 +734,7 @@ impl Default for AppSettings {
             split_ratio_persist: true,
             agent_restore: AgentRestoreSettings::default(),
             resume_command_approvals: default_resume_command_approvals(),
+            imessage_mode: false,
             shortcuts: shortcuts::ShortcutConfig::default(),
         }
     }

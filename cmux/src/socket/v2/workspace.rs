@@ -1664,6 +1664,41 @@ pub(super) fn handle_workspace_report_pr_checks(
 }
 
 // -----------------------------------------------------------------------
+// workspace.set_imessage_mode
+// -----------------------------------------------------------------------
+
+pub(super) fn handle_workspace_set_imessage_mode(
+    id: Value,
+    params: &Value,
+    state: &Arc<SharedState>,
+) -> Response {
+    let ws_id = match parse_workspace_param(params) {
+        Ok(v) => v,
+        Err(()) => return Response::error(id, "invalid_params", "Invalid workspace UUID"),
+    };
+    let enabled = match params.get("enabled").and_then(|v| v.as_bool()) {
+        Some(b) => b,
+        None => return Response::error(id, "invalid_params", "Provide 'enabled' (bool)"),
+    };
+
+    let mut tm = lock_or_recover(&state.tab_manager);
+    let ws = if let Some(wid) = ws_id {
+        tm.workspace_mut(wid)
+    } else {
+        tm.selected_mut()
+    };
+
+    if let Some(ws) = ws {
+        ws.imessage_mode = enabled;
+        drop(tm);
+        state.notify_metadata_refresh();
+        Response::success(id, serde_json::json!({"ok": true, "imessage_mode": enabled}))
+    } else {
+        Response::error(id, "not_found", "Workspace not found")
+    }
+}
+
+// -----------------------------------------------------------------------
 // workspace.move_to_window
 // -----------------------------------------------------------------------
 
@@ -1800,6 +1835,88 @@ pub(super) fn handle_agent_fork_conversation(
         serde_json::json!({
             "workspace_id": ws_id_str,
             "workspace": ws_id_str,
+        }),
+    )
+}
+
+// -----------------------------------------------------------------------
+// agent.spawn_subagent
+// -----------------------------------------------------------------------
+
+pub(super) fn handle_agent_spawn_subagent(
+    id: Value,
+    params: &Value,
+    state: &Arc<SharedState>,
+) -> Response {
+    let parent_panel_id = match params
+        .get("parent_panel_id")
+        .and_then(|v| v.as_str())
+        .and_then(|s| Uuid::parse_str(s).ok())
+    {
+        Some(pid) => pid,
+        None => {
+            return Response::error(
+                id,
+                "invalid_params",
+                "Provide 'parent_panel_id' (UUID of parent panel)",
+            )
+        }
+    };
+
+    let cli_name = params
+        .get("cli_name")
+        .and_then(|v| v.as_str())
+        .map(|s| truncate_str(s, MAX_NAME_LEN).to_string());
+
+    let working_directory = params
+        .get("working_directory")
+        .and_then(|v| v.as_str())
+        .map(|s| truncate_str(s, MAX_DIRECTORY_LEN).to_string());
+
+    // Find the workspace containing the parent panel
+    let (ws_id, parent_dir) = {
+        let tm = lock_or_recover(&state.tab_manager);
+        if let Some(ws) = tm.find_workspace_with_panel(parent_panel_id) {
+            let dir = working_directory
+                .clone()
+                .or_else(|| {
+                    ws.panels
+                        .get(&parent_panel_id)
+                        .and_then(|p| p.directory.clone())
+                })
+                .unwrap_or_else(|| ws.current_directory.clone());
+            (ws.id, dir)
+        } else {
+            return Response::error(id, "not_found", "Parent panel not found");
+        }
+    };
+
+    // Create a new terminal panel as a subagent sibling
+    let mut new_panel = crate::model::panel::Panel::new_terminal();
+    new_panel.parent_panel_id = Some(parent_panel_id);
+    new_panel.directory = Some(parent_dir.clone());
+    if let Some(ref cli) = cli_name {
+        new_panel.title = Some(format!("{cli} (subagent)"));
+    }
+    let new_panel_id = new_panel.id;
+
+    {
+        let mut tm = lock_or_recover(&state.tab_manager);
+        if let Some(ws) = tm.workspace_mut(ws_id) {
+            // Set focused panel to parent so split is adjacent
+            ws.focused_panel_id = Some(parent_panel_id);
+            ws.insert_panel(new_panel, crate::model::panel::SplitOrientation::Horizontal);
+        } else {
+            return Response::error(id, "not_found", "Workspace no longer exists");
+        }
+    }
+
+    state.notify_ui_refresh();
+    Response::success(
+        id,
+        serde_json::json!({
+            "panel_id": new_panel_id.to_string(),
+            "workspace_id": ws_id.to_string(),
         }),
     )
 }

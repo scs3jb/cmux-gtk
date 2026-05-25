@@ -863,6 +863,7 @@ fn restore_session(state: &Rc<AppState>) -> Vec<Uuid> {
                         .as_ref()
                         .map(|b| b.page_zoom)
                         .filter(|&z| z != 1.0),
+                    parent_panel_id: None,
                 };
                 panels.insert(panel.id, panel);
             }
@@ -1160,6 +1161,31 @@ pub fn apply_theme_from_settings() {
             &display,
             &provider,
             gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION + 1,
+        );
+    }
+
+    // Inject chat-bubble CSS for iMessage mode (always present; only visible when
+    // the workspace has imessage_mode enabled and the labels have these classes).
+    {
+        let css = "\
+.chat-bubble-assistant { \
+    background: alpha(@accent_color, 0.15); \
+    border-radius: 12px; \
+    padding: 4px 10px; \
+    margin: 1px 2px; \
+}\n\
+.chat-bubble-user { \
+    background: alpha(@window_fg_color, 0.08); \
+    border-radius: 12px; \
+    padding: 4px 10px; \
+    margin: 1px 2px; \
+}\n";
+        let provider = gtk4::CssProvider::new();
+        provider.load_from_data(css);
+        gtk4::style_context_add_provider_for_display(
+            &display,
+            &provider,
+            gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
     }
 

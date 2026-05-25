@@ -196,10 +196,16 @@ pub fn dispatch(json_line: &str, state: &Arc<SharedState>) -> Response {
         "workspace.move_to_window" => {
             workspace::handle_workspace_move_to_window(id, &req.params, state)
         }
+        "workspace.set_imessage_mode" => {
+            workspace::handle_workspace_set_imessage_mode(id, &req.params, state)
+        }
 
         // Agent commands
         "agent.fork_conversation" => {
             workspace::handle_agent_fork_conversation(id, &req.params, state)
+        }
+        "agent.spawn_subagent" => {
+            workspace::handle_agent_spawn_subagent(id, &req.params, state)
         }
 
         // App commands

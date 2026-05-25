@@ -314,6 +314,18 @@ pub enum WorkspaceCommands {
         #[arg(long)]
         dirty: bool,
     },
+    /// Enable or disable iMessage chat-bubble mode for a workspace
+    ImessageMode {
+        /// Enable iMessage mode
+        #[arg(long, conflicts_with = "disable")]
+        enable: bool,
+        /// Disable iMessage mode
+        #[arg(long, conflicts_with = "enable")]
+        disable: bool,
+        /// Target workspace UUID (defaults to selected)
+        #[arg(long)]
+        workspace: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1167,7 +1179,7 @@ pub enum AgentCommands {
     },
     /// Dispatch an agent lifecycle hook (namespaced by --cli)
     Hook {
-        /// Hook event: session-start, session-stop, session-end, notification
+        /// Hook event: session-start, session-stop, session-end, notification, subagent-start, subagent-stop
         event: String,
         /// Agent CLI name used to namespace status keys (e.g. claude, codex)
         #[arg(long, default_value = "agent")]
@@ -1175,5 +1187,23 @@ pub enum AgentCommands {
         /// Notification message (for notification events; overrides stdin JSON)
         #[arg(long)]
         message: Option<String>,
+        /// Parent panel UUID (required for subagent-start)
+        #[arg(long)]
+        parent: Option<String>,
+        /// Panel UUID (required for subagent-stop)
+        #[arg(long)]
+        panel: Option<String>,
+    },
+    /// Spawn a subagent panel next to a parent panel (Codex Teams)
+    SpawnSubagent {
+        /// Parent panel UUID
+        #[arg(long)]
+        parent_panel_id: String,
+        /// CLI name for the subagent (e.g. codex)
+        #[arg(long, default_value = "codex")]
+        cli_name: String,
+        /// Working directory for the subagent
+        #[arg(long)]
+        working_directory: Option<String>,
     },
 }

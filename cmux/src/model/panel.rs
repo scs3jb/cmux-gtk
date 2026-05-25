@@ -41,6 +41,10 @@ pub struct Panel {
     pub pending_scrollback: Option<String>,
     /// Browser zoom level to restore (session restore).
     pub pending_zoom: Option<f64>,
+    /// Parent panel ID for Codex Teams subagent panes. When set, this panel was
+    /// spawned as a subagent of the referenced parent panel.
+    #[serde(default)]
+    pub parent_panel_id: Option<Uuid>,
 }
 
 impl Panel {
@@ -62,6 +66,7 @@ impl Panel {
             command: None,
             pending_scrollback: None,
             pending_zoom: None,
+            parent_panel_id: None,
         }
     }
 
@@ -83,6 +88,7 @@ impl Panel {
             command: None,
             pending_scrollback: None,
             pending_zoom: None,
+            parent_panel_id: None,
         }
     }
 
@@ -108,6 +114,7 @@ impl Panel {
             command: None,
             pending_scrollback: None,
             pending_zoom: None,
+            parent_panel_id: None,
         }
     }
 
