@@ -5,8 +5,9 @@ use libadwaita as adw;
 use libadwaita::prelude::*;
 
 use crate::settings::{
-    self, AppSettings, BrowserSettings, NewWorkspacePlacement, NotificationSound, SearchEngine,
-    SidebarDisplaySettings, SidebarFocusStyle, SocketAccess, ThemeMode,
+    self, AppSettings, BrowserSettings, NewWorkspacePlacement, NotificationSound,
+    PlusButtonAction, SearchEngine, SidebarDisplaySettings, SidebarFocusStyle, SocketAccess,
+    ThemeMode,
 };
 
 /// Create and show the settings preferences window.
@@ -52,6 +53,20 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
         }
     });
     theme_group.add(&theme_row);
+
+    let tab_bar_font_size_row = adw::EntryRow::new();
+    tab_bar_font_size_row.set_title("Tab Bar Font Size");
+    tab_bar_font_size_row.set_tooltip_text(Some(
+        "Font size in pixels for pane tab bar labels. Leave empty or 0 for system default.",
+    ));
+    let font_size_initial = if current_settings.tab_bar_font_size > 0.0 {
+        current_settings.tab_bar_font_size.to_string()
+    } else {
+        String::new()
+    };
+    tab_bar_font_size_row.set_text(&font_size_initial);
+    theme_group.add(&tab_bar_font_size_row);
+
     appearance_page.add(&theme_group);
 
     // ── Behavior group ──
@@ -77,6 +92,12 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
     confirm_close_row.set_subtitle("Show confirmation when quitting with active terminals");
     confirm_close_row.set_active(current_settings.confirm_before_close);
     behavior_group.add(&confirm_close_row);
+
+    let confirm_quit_row = adw::SwitchRow::new();
+    confirm_quit_row.set_title("Confirm Quit");
+    confirm_quit_row.set_subtitle("Show confirmation dialog before quitting the app");
+    confirm_quit_row.set_active(current_settings.confirm_quit);
+    behavior_group.add(&confirm_quit_row);
 
     let placement_row = adw::ComboRow::new();
     placement_row.set_title("New Workspace Placement");
@@ -226,6 +247,55 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
     sidebar_group.add(&match_terminal_bg_row);
 
     appearance_page.add(&sidebar_group);
+
+    // ── Workspace group ──
+    let workspace_group = adw::PreferencesGroup::new();
+    workspace_group.set_title("Workspace");
+
+    let warn_close_tab_row = adw::SwitchRow::new();
+    warn_close_tab_row.set_title("Warn Before Closing Tab");
+    warn_close_tab_row
+        .set_subtitle("Show confirmation before closing a workspace with active terminals");
+    warn_close_tab_row.set_active(current_settings.warn_before_closing_tab);
+    workspace_group.add(&warn_close_tab_row);
+
+    let cwd_inherit_row = adw::SwitchRow::new();
+    cwd_inherit_row.set_title("Inherit Working Directory");
+    cwd_inherit_row
+        .set_subtitle("New workspaces start in the same directory as the active terminal");
+    cwd_inherit_row.set_active(current_settings.workspace_cwd_inheritance);
+    workspace_group.add(&cwd_inherit_row);
+
+    let plus_btn_row = adw::ComboRow::new();
+    plus_btn_row.set_title("Plus Button Action");
+    plus_btn_row.set_subtitle("What the + button in the header creates");
+    let plus_btn_labels: Vec<&str> = PlusButtonAction::ALL.iter().map(|a| a.label()).collect();
+    let plus_btn_list = gtk4::StringList::new(&plus_btn_labels);
+    plus_btn_row.set_model(Some(&plus_btn_list));
+    plus_btn_row.set_selected(current_settings.plus_button_action.to_index());
+    workspace_group.add(&plus_btn_row);
+
+    let split_ratio_persist_row = adw::SwitchRow::new();
+    split_ratio_persist_row.set_title("Persist Split Ratios");
+    split_ratio_persist_row
+        .set_subtitle("Save and restore pane split positions across sessions");
+    split_ratio_persist_row.set_active(current_settings.split_ratio_persist);
+    workspace_group.add(&split_ratio_persist_row);
+
+    appearance_page.add(&workspace_group);
+
+    // ── Terminal group ──
+    let terminal_group = adw::PreferencesGroup::new();
+    terminal_group.set_title("Terminal");
+
+    let copy_on_select_row = adw::SwitchRow::new();
+    copy_on_select_row.set_title("Copy on Select");
+    copy_on_select_row
+        .set_subtitle("Automatically copy terminal selection to the clipboard");
+    copy_on_select_row.set_active(current_settings.copy_on_select);
+    terminal_group.add(&copy_on_select_row);
+
+    appearance_page.add(&terminal_group);
 
     window.add(&appearance_page);
 
@@ -631,6 +701,13 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
         let browser_theme_row = browser_theme_row.clone();
         let shortcuts_state = shortcuts_state.clone();
         let sound_preset_row = sound_preset_row.clone();
+        let confirm_quit_row = confirm_quit_row.clone();
+        let tab_bar_font_size_row = tab_bar_font_size_row.clone();
+        let warn_close_tab_row = warn_close_tab_row.clone();
+        let cwd_inherit_row = cwd_inherit_row.clone();
+        let plus_btn_row = plus_btn_row.clone();
+        let split_ratio_persist_row = split_ratio_persist_row.clone();
+        let copy_on_select_row = copy_on_select_row.clone();
         window.connect_close_request(move |_| {
             let theme = match theme_row.selected() {
                 1 => ThemeMode::Light,
@@ -721,6 +798,17 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
                 link_routing: settings::load().link_routing,
                 remote_ssh_enabled: remote_ssh_row.is_active(),
                 persist_scrollback: current_settings.persist_scrollback,
+                warn_before_closing_tab: warn_close_tab_row.is_active(),
+                copy_on_select: copy_on_select_row.is_active(),
+                confirm_quit: confirm_quit_row.is_active(),
+                tab_bar_font_size: tab_bar_font_size_row
+                    .text()
+                    .parse::<f32>()
+                    .unwrap_or(0.0)
+                    .max(0.0),
+                workspace_cwd_inheritance: cwd_inherit_row.is_active(),
+                plus_button_action: PlusButtonAction::from_index(plus_btn_row.selected()),
+                split_ratio_persist: split_ratio_persist_row.is_active(),
                 shortcuts: shortcuts_state.borrow().clone(),
                 minimal_mode: current_settings.minimal_mode,
             };

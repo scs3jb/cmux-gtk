@@ -1043,19 +1043,27 @@ fn setup_row_context_menu(
         let state = state.clone();
         let row_weak = row.downgrade();
         close_action.connect_activate(move |_, _| {
-            let (is_pinned, title) = {
+            let (is_pinned, title, has_terminals) = {
                 let tm = lock_or_recover(&state.shared.tab_manager);
                 tm.get(index)
-                    .map(|ws| (ws.is_pinned, ws.display_title().to_string()))
-                    .unwrap_or((false, String::new()))
+                    .map(|ws| {
+                        use crate::model::panel::PanelType;
+                        let has_terminals =
+                            ws.panels.values().any(|p| p.panel_type == PanelType::Terminal);
+                        (ws.is_pinned, ws.display_title().to_string(), has_terminals)
+                    })
+                    .unwrap_or((false, String::new(), false))
             };
-            if is_pinned {
-                if let Some(row) = row_weak.upgrade() {
-                    if let Some(root) = row.root() {
-                        if let Some(window) =
-                            root.downcast_ref::<libadwaita::ApplicationWindow>()
-                        {
+            if let Some(row) = row_weak.upgrade() {
+                if let Some(root) = row.root() {
+                    if let Some(window) = root.downcast_ref::<libadwaita::ApplicationWindow>() {
+                        if is_pinned {
                             show_close_pinned_dialog(window, &state, index, &title);
+                            return;
+                        }
+                        let warn = crate::settings::load().warn_before_closing_tab;
+                        if warn && has_terminals {
+                            show_close_tab_dialog(window, &state, index, &title);
                             return;
                         }
                     }
@@ -1243,6 +1251,36 @@ fn show_rename_for_index(
         }
     });
 
+    dialog.present();
+}
+
+/// Show a confirmation dialog before closing a non-pinned workspace that has active terminals.
+fn show_close_tab_dialog(
+    window: &libadwaita::ApplicationWindow,
+    state: &Rc<AppState>,
+    index: usize,
+    title: &str,
+) {
+    use libadwaita::prelude::*;
+
+    let heading = format!("Close '{title}'?");
+    let dialog = libadwaita::MessageDialog::new(
+        Some(window),
+        Some(&heading),
+        Some("This workspace has active terminals. Are you sure you want to close it?"),
+    );
+    dialog.add_response("cancel", "Cancel");
+    dialog.add_response("close", "Close");
+    dialog.set_default_response(Some("cancel"));
+    dialog.set_response_appearance("close", libadwaita::ResponseAppearance::Destructive);
+
+    let state = state.clone();
+    dialog.connect_response(None::<&str>, move |_, response| {
+        if response == "close" {
+            lock_or_recover(&state.shared.tab_manager).remove(index);
+            state.shared.notify_ui_refresh();
+        }
+    });
     dialog.present();
 }
 

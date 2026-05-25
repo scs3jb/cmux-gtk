@@ -1032,6 +1032,19 @@ pub fn apply_theme_from_settings() {
         }
     }
 
+    // Apply tab bar font size override if non-zero
+    if settings.tab_bar_font_size > 0.0 {
+        let size = settings.tab_bar_font_size;
+        let css = format!(".pane-tab {{ font-size: {size}px; }}\n");
+        let provider = gtk4::CssProvider::new();
+        provider.load_from_data(&css);
+        gtk4::style_context_add_provider_for_display(
+            &display,
+            &provider,
+            gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION + 1,
+        );
+    }
+
     // Apply custom sidebar selection color if set (overrides theme default)
     let sel = &settings.sidebar.selection_color;
     if !sel.is_empty() {

@@ -40,6 +40,20 @@ pub struct AppSettings {
     /// Persist terminal scrollback in session.json (default: true).
     /// Disable if terminal output may contain sensitive data (passwords, tokens).
     pub persist_scrollback: bool,
+    /// Show confirmation dialog before closing a non-pinned workspace/tab.
+    pub warn_before_closing_tab: bool,
+    /// Copy terminal selection to clipboard automatically.
+    pub copy_on_select: bool,
+    /// Show confirmation dialog before quitting the app (Cmd/Ctrl+Q).
+    pub confirm_quit: bool,
+    /// Font size for the workspace tab bar labels (0.0 = system default).
+    pub tab_bar_font_size: f32,
+    /// New workspaces inherit the cwd from the active terminal panel.
+    pub workspace_cwd_inheritance: bool,
+    /// What the + button in the tab bar does.
+    pub plus_button_action: PlusButtonAction,
+    /// Persist split ratios (divider positions) in session.
+    pub split_ratio_persist: bool,
     /// Keyboard shortcuts.
     #[serde(skip)]
     pub shortcuts: shortcuts::ShortcutConfig,
@@ -154,6 +168,42 @@ impl NewWorkspacePlacement {
             Self::End => 0,
             Self::AfterCurrent => 1,
             Self::Top => 2,
+        }
+    }
+}
+
+/// What the + button in the workspace tab bar does.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlusButtonAction {
+    /// Create a new workspace (default).
+    #[default]
+    NewWorkspace,
+    /// Add a new tab (panel) to the current workspace.
+    NewTab,
+}
+
+impl PlusButtonAction {
+    pub const ALL: &[Self] = &[Self::NewWorkspace, Self::NewTab];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::NewWorkspace => "New Workspace",
+            Self::NewTab => "New Tab",
+        }
+    }
+
+    pub fn from_index(i: u32) -> Self {
+        match i {
+            1 => Self::NewTab,
+            _ => Self::NewWorkspace,
+        }
+    }
+
+    pub fn to_index(self) -> u32 {
+        match self {
+            Self::NewWorkspace => 0,
+            Self::NewTab => 1,
         }
     }
 }
@@ -551,6 +601,13 @@ impl Default for AppSettings {
             remote_ssh_enabled: false,
             minimal_mode: false,
             persist_scrollback: true,
+            warn_before_closing_tab: true,
+            copy_on_select: false,
+            confirm_quit: true,
+            tab_bar_font_size: 0.0,
+            workspace_cwd_inheritance: true,
+            plus_button_action: PlusButtonAction::default(),
+            split_ratio_persist: true,
             shortcuts: shortcuts::ShortcutConfig::default(),
         }
     }

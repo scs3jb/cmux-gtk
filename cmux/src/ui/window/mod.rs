@@ -14,7 +14,7 @@ use libadwaita::prelude::*;
 use tokio::sync::mpsc::UnboundedReceiver;
 
 use crate::app::{lock_or_recover, AppState, UiEvent};
-use crate::model::panel::SplitOrientation;
+use crate::model::panel::{Panel, SplitOrientation};
 use crate::model::{PanelType, Workspace};
 use crate::ui::{notifications_panel, search_overlay, sidebar, split_view};
 
@@ -124,11 +124,44 @@ pub fn create_window(
         let list_box = list_box.clone();
         let content_box = content_box.clone();
         new_ws_btn.connect_clicked(move |_| {
-            let workspace = Workspace::new();
-            let placement = crate::settings::load().new_workspace_placement;
-            lock_or_recover(&state.shared.tab_manager)
-                .add_workspace_with_placement(workspace, placement);
-            refresh_ui(&list_box, &content_box, &state);
+            use crate::settings::PlusButtonAction;
+            let settings = crate::settings::load();
+            match settings.plus_button_action {
+                PlusButtonAction::NewTab => {
+                    let mut tm = lock_or_recover(&state.shared.tab_manager);
+                    if let Some(ws) = tm.selected_mut() {
+                        let new_panel = Panel::new_terminal();
+                        let new_id = new_panel.id;
+                        if let Some(focused_id) = ws.focused_panel_id {
+                            ws.layout.add_panel_to_pane(focused_id, new_id);
+                        }
+                        ws.panels.insert(new_id, new_panel);
+                        ws.previous_focused_panel_id = ws.focused_panel_id;
+                        ws.focused_panel_id = Some(new_id);
+                    }
+                    drop(tm);
+                    state.shared.notify_ui_refresh();
+                }
+                PlusButtonAction::NewWorkspace => {
+                    let placement = settings.new_workspace_placement;
+                    let workspace = if settings.workspace_cwd_inheritance {
+                        let cwd = lock_or_recover(&state.shared.tab_manager)
+                            .selected()
+                            .map(|ws| ws.current_directory.clone())
+                            .unwrap_or_default();
+                        if cwd.is_empty() {
+                            Workspace::new()
+                        } else {
+                            Workspace::with_directory(&cwd)
+                        }
+                    } else {
+                        Workspace::new()
+                    };
+                    lock_or_recover(&state.shared.tab_manager)
+                        .add_workspace_with_placement(workspace, placement);
+                    refresh_ui(&list_box, &content_box, &state);
+                }
+            }
         });
     }
     header.pack_start(&new_ws_btn);
@@ -245,7 +278,7 @@ pub fn create_window(
 
             // Last window — check for quit confirmation
             let settings = crate::settings::load();
-            if !settings.confirm_before_close {
+            if !settings.confirm_before_close || !settings.confirm_quit {
                 return glib::Propagation::Proceed;
             }
 

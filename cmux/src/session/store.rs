@@ -173,7 +173,9 @@ fn truncate_scrollback(text: &str) -> String {
 pub fn create_snapshot(state: &crate::app::AppState) -> AppSessionSnapshot {
     // Capture scrollback text for all terminal panels before locking tab_manager.
     // Skipped when persist_scrollback=false to avoid persisting sensitive data.
-    let persist_scrollback = crate::settings::load().persist_scrollback;
+    let app_settings = crate::settings::load();
+    let persist_scrollback = app_settings.persist_scrollback;
+    let split_ratio_persist = app_settings.split_ratio_persist;
     let scrollback_map: std::collections::HashMap<uuid::Uuid, String> = if persist_scrollback {
         state
             .terminal_cache
@@ -240,6 +242,14 @@ pub fn create_snapshot(state: &crate::app::AppState) -> AppSessionSnapshot {
             })
             .collect();
 
+        let layout = {
+            let mut snapshot = SessionWorkspaceLayoutSnapshot::from_layout(&ws.layout);
+            if !split_ratio_persist {
+                normalize_divider_positions(&mut snapshot);
+            }
+            snapshot
+        };
+
         SessionWorkspaceSnapshot {
             process_title: ws.process_title.clone(),
             custom_title: ws.custom_title.clone(),
@@ -247,7 +257,7 @@ pub fn create_snapshot(state: &crate::app::AppState) -> AppSessionSnapshot {
             is_pinned: ws.is_pinned,
             current_directory: ws.current_directory.clone(),
             focused_panel_id: ws.focused_panel_id,
-            layout: SessionWorkspaceLayoutSnapshot::from_layout(&ws.layout),
+            layout,
             panels,
             status_entries: ws.status_entries.clone(),
             log_entries: ws.log_entries.clone(),
@@ -300,6 +310,17 @@ pub fn create_snapshot(state: &crate::app::AppState) -> AppSessionSnapshot {
         version: 1,
         created_at: now,
         windows,
+    }
+}
+
+/// Reset all split divider positions to 0.5 (equal split) in a layout snapshot.
+/// Used when `split_ratio_persist` is disabled so sessions restore with equal splits.
+fn normalize_divider_positions(layout: &mut crate::session::snapshot::SessionWorkspaceLayoutSnapshot) {
+    use crate::session::snapshot::SessionWorkspaceLayoutSnapshot;
+    if let SessionWorkspaceLayoutSnapshot::Split { split } = layout {
+        split.divider_position = 0.5;
+        normalize_divider_positions(&mut split.first);
+        normalize_divider_positions(&mut split.second);
     }
 }
 
