@@ -942,6 +942,66 @@ pub fn create_browser_widget_with_profile(
         });
     }
 
+    // -- File chooser: handle window.showOpenFilePicker() and <input type="file"> --
+    {
+        let wv = web_view.clone();
+        web_view.connect_run_file_chooser(move |_webview, request| {
+            use gtk4::prelude::FileChooserExt;
+
+            let select_multiple = request.selects_multiple();
+            let filter = request.mime_types_filter();
+            let request = request.clone();
+
+            let action = gtk4::FileChooserAction::Open;
+            let window = wv
+                .root()
+                .and_then(|r| r.downcast::<gtk4::Window>().ok());
+
+            let native = gtk4::FileChooserNative::builder()
+                .title("Open File")
+                .action(action)
+                .select_multiple(select_multiple)
+                .modal(true);
+            let native = if let Some(ref w) = window {
+                native.transient_for(w)
+            } else {
+                native
+            };
+            let native = native.build();
+
+            if let Some(f) = filter {
+                native.set_filter(&f);
+            }
+
+            native.connect_response(move |dialog, response| {
+                if response == gtk4::ResponseType::Accept {
+                    let model = dialog.files();
+                    let n = model.n_items();
+                    let paths: Vec<String> = (0..n)
+                        .filter_map(|i| {
+                            model
+                                .item(i)
+                                .and_then(|obj| obj.downcast::<gio::File>().ok())
+                                .and_then(|f| f.path())
+                                .map(|p| p.to_string_lossy().to_string())
+                        })
+                        .collect();
+                    let refs: Vec<&str> = paths.iter().map(String::as_str).collect();
+                    if !refs.is_empty() {
+                        request.select_files(&refs);
+                    } else {
+                        request.cancel();
+                    }
+                } else {
+                    request.cancel();
+                }
+            });
+
+            native.show();
+            true
+        });
+    }
+
     // -- Favicon tracking --
     {
         web_view.connect_favicon_notify(move |wv| {
@@ -978,6 +1038,20 @@ pub fn create_browser_widget_with_profile(
             }
         });
     }
+    // Ctrl+click reload button → bypass cache (force reload)
+    {
+        let wv = web_view.clone();
+        let reload_gesture = gtk4::GestureClick::new();
+        reload_gesture.set_button(1);
+        reload_btn.add_controller(reload_gesture.clone());
+        reload_gesture.connect_pressed(move |gesture, _, _, _| {
+            let modifiers = gesture.current_event_state();
+            if modifiers.contains(gdk4::ModifierType::CONTROL_MASK) {
+                gesture.set_state(gtk4::EventSequenceState::Claimed);
+                wv.reload_bypass_cache();
+            }
+        });
+    }
 
     // -- URL entry navigation --
     {
@@ -990,9 +1064,10 @@ pub fn create_browser_widget_with_profile(
         });
     }
 
-    // -- Load-changed signal: update URL bar + button sensitivity --
+    // -- Load-changed signal: update button states --
+    // URL bar updates are handled exclusively by connect_uri_notify below,
+    // so we never update the URL bar here (avoids showing redirect URLs).
     {
-        let entry = url_entry.clone();
         let back = back_btn.clone();
         let fwd = fwd_btn.clone();
         let reload = reload_btn.clone();
@@ -1019,10 +1094,6 @@ pub fn create_browser_widget_with_profile(
                     wv.evaluate_javascript(js, None, None, gio::Cancellable::NONE, |_| {});
                 }
                 _ => {}
-            }
-
-            if let Some(uri) = wv.uri() {
-                super::omnibar::set_url_quiet(&entry, &uri);
             }
         });
     }
