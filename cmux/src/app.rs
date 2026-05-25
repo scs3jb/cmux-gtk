@@ -1450,6 +1450,23 @@ impl ghostty_gtk::callbacks::GhosttyCallbackHandler for CmuxCallbackHandler {
                 }
                 true
             }
+            // Parity batch 25 — Kitty keyboard mode reset at prompt boundaries.
+            //
+            // When OSC 133 D (command finished) fires, any Kitty keyboard protocol
+            // mode that a TUI app left active after abnormal exit should be cleared.
+            // ghostty does not yet expose a dedicated `ghostty_surface_reset_keyboard_mode`
+            // FFI call, and there is no `reset_terminal` binding action available.
+            //
+            // TODO: ghostty_surface_reset_keyboard_mode — no FFI yet.
+            //       Once ghostty exposes such a function (or a binding action like
+            //       "reset_keyboard_mode"), call it here on the target surface so
+            //       that stale Kitty protocol modes are cleared at every prompt.
+            ghostty_action_tag_e::GHOSTTY_ACTION_COMMAND_FINISHED => {
+                // Acknowledge the action. Actual keyboard-mode reset is deferred
+                // until the upstream ghostty FFI exposes the necessary call.
+                tracing::trace!("COMMAND_FINISHED — Kitty keyboard mode reset pending FFI");
+                true
+            }
             ghostty_action_tag_e::GHOSTTY_ACTION_DESKTOP_NOTIFICATION => {
                 // SAFETY: action tag is DESKTOP_NOTIFICATION so the union contains
                 // desktop_notification. Pointers are null-checked before CStr::from_ptr.

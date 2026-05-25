@@ -216,6 +216,22 @@ fn create_terminal_widget(
     }
     overlay.add_controller(motion);
 
+    // Parity batch 25 — Terminal textbox input (upstream issue ~#4333).
+    //
+    // Feature: double-click a word in the terminal to open an inline
+    // gtk4::Popover with a gtk4::Entry.  On `activate`, the typed text is
+    // sent to the terminal via `surface.send_text()`.  This allows editing
+    // TUI textbox widgets even when the terminal is in raw mode.
+    //
+    // TODO: Implement terminal textbox popover.
+    //   - Attach a GestureClick(n_press == 2) to `gl_surface`.
+    //   - On double-click: create a gtk4::Popover with a gtk4::Entry,
+    //     anchor it to the click position, and call popover.popup().
+    //   - Connect entry.connect_activate() to call surface.send_text(&text)
+    //     and then popover.popdown().
+    //   - This is deferred because the implementation requires >100 LOC and
+    //     proper integration with ghostty word-selection / coordinate mapping.
+
     // Click-to-focus: when user clicks this pane, focus it in the model
     // and trigger a UI refresh so the active indicator moves.
     let click = gtk4::GestureClick::new();
