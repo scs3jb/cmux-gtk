@@ -470,6 +470,28 @@ pub(super) fn bind_shared_state_updates(
                             super::dialogs::show_ssh_dialog(&window, &state);
                         }
                     }
+                    UiEvent::OpenSshDeepLink { destination, port } => {
+                        let mut params = serde_json::json!({
+                            "destination": destination,
+                        });
+                        if let Some(p) = port {
+                            params["port"] = serde_json::json!(p);
+                        }
+                        let resp = crate::socket::v2::workspace::handle_workspace_create_ssh(
+                            serde_json::json!(0),
+                            &params,
+                            &state.shared,
+                        );
+                        if resp.ok {
+                            tracing::info!("SSH deep link opened workspace for {}", destination);
+                        } else {
+                            tracing::warn!(
+                                "SSH deep link failed for {}: {:?}",
+                                destination,
+                                resp.error
+                            );
+                        }
+                    }
                     UiEvent::RemoteConnect { workspace_id } => {
                         if !crate::settings::load().remote_ssh_enabled {
                             tracing::warn!("Remote SSH disabled in settings — ignoring connect request");

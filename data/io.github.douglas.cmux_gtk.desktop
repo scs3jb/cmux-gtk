@@ -2,7 +2,7 @@
 Name=cmux
 GenericName=Terminal Multiplexer
 Comment=Terminal multiplexer for AI coding agents
-Exec=cmux-app
+Exec=cmux-app %u
 Icon=io.github.douglas.cmux_gtk
 Terminal=false
 Type=Application
@@ -10,3 +10,4 @@ Categories=System;TerminalEmulator;Development;
 Keywords=terminal;multiplexer;browser;ai;coding;
 StartupNotify=true
 StartupWMClass=cmux-gtk
+MimeType=x-scheme-handler/cmux;

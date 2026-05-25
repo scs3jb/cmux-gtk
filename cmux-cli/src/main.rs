@@ -21,6 +21,10 @@ struct Cli {
     /// Output raw JSON
     #[arg(long, global = true)]
     json: bool,
+
+    /// Route command to a specific window by ID (UUID)
+    #[arg(long, global = true)]
+    window: Option<String>,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -35,7 +39,7 @@ fn main() -> anyhow::Result<()> {
     if let Commands::Workspace(WorkspaceCommands::ReorderWorkspaces { workspaces, dry_run: true }) =
         &cli.command
     {
-        let current_resp = rpc::send_request(&cli.socket, "workspace.list", serde_json::json!({}))?;
+        let current_resp = rpc::send_request(&cli.socket, "workspace.list", serde_json::json!({}), None)?;
         if current_resp.get("ok").and_then(|v| v.as_bool()) != Some(true) {
             eprintln!("Failed to fetch workspace list for dry-run.");
             std::process::exit(1);
@@ -64,7 +68,7 @@ fn main() -> anyhow::Result<()> {
             ConfigCommands::Doctor => return config::run_doctor(),
             ConfigCommands::Docs => return config::run_docs(),
             ConfigCommands::Reload => {
-                let response = rpc::send_request(&cli.socket, "settings.open", serde_json::json!({}))?;
+                let response = rpc::send_request(&cli.socket, "settings.open", serde_json::json!({}), None)?;
                 if cli.json {
                     println!("{}", serde_json::to_string_pretty(&response)?);
                 } else if response.get("ok").and_then(|v| v.as_bool()) == Some(true) {
@@ -650,7 +654,7 @@ fn main() -> anyhow::Result<()> {
         ),
     };
 
-    let response = rpc::send_request(&cli.socket, method, params)?;
+    let response = rpc::send_request(&cli.socket, method, params, cli.window.as_deref())?;
 
     if cli.json {
         println!("{}", serde_json::to_string_pretty(&response)?);

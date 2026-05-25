@@ -18,7 +18,7 @@ mod surface;
 mod system;
 mod tab;
 mod window;
-mod workspace;
+pub(crate) mod workspace;
 
 use std::sync::Arc;
 
@@ -37,6 +37,10 @@ pub struct Request {
     pub method: String,
     #[serde(default)]
     pub params: Value,
+    /// Optional window routing: route this request to the specified window UUID.
+    /// When present, the server validates the window exists before dispatching.
+    #[serde(default)]
+    pub window_id: Option<String>,
 }
 
 /// V2 protocol response — `ok: true` with `result` on success, `ok: false` with `error` on failure.
@@ -102,6 +106,27 @@ pub fn dispatch(json_line: &str, state: &Arc<SharedState>) -> Response {
     };
 
     let id = req.id.clone();
+
+    // Validate window_id when specified: ensure the window exists.
+    // TODO: route events to the specific window's event channel rather than the primary window.
+    // Currently all handlers call state.send_ui_event() which targets the primary window.
+    // Full per-window routing requires threading window_id through every handler function.
+    if let Some(ref wid_str) = req.window_id {
+        match uuid::Uuid::parse_str(wid_str) {
+            Ok(wid) => {
+                if !state.window_ids().contains(&wid) {
+                    return Response::error(
+                        id,
+                        "not_found",
+                        &format!("Window '{}' not found", wid_str),
+                    );
+                }
+            }
+            Err(_) => {
+                return Response::error(id, "invalid_params", "window_id must be a valid UUID");
+            }
+        }
+    }
 
     match req.method.as_str() {
         // System

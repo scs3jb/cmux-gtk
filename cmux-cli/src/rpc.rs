@@ -11,19 +11,30 @@ static REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 
 /// Send a v2 request to the cmux socket and return the response.
 ///
+/// When `window_id` is `Some`, it is included as a top-level `"window_id"` field
+/// in the request so the server can route the command to the correct window.
+///
 /// Retries transient connection failures (EAGAIN, ECONNREFUSED) up to 3 times
 /// with 100ms backoff to handle startup races and momentary unavailability.
-pub fn send_request(socket_path: &str, method: &str, params: Value) -> anyhow::Result<Value> {
+pub fn send_request(
+    socket_path: &str,
+    method: &str,
+    params: Value,
+    window_id: Option<&str>,
+) -> anyhow::Result<Value> {
     let mut stream = connect_with_retry(socket_path)?;
     stream.set_read_timeout(Some(IO_TIMEOUT))?;
     stream.set_write_timeout(Some(IO_TIMEOUT))?;
 
     let id = REQUEST_ID.fetch_add(1, Ordering::Relaxed);
-    let request = serde_json::json!({
+    let mut request = serde_json::json!({
         "id": id,
         "method": method,
         "params": params,
     });
+    if let Some(wid) = window_id {
+        request["window_id"] = serde_json::json!(wid);
+    }
 
     let request_json = serde_json::to_string(&request)?;
     stream.write_all(request_json.as_bytes())?;

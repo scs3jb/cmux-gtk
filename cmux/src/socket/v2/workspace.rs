@@ -129,7 +129,7 @@ pub(super) fn create_workspace(
 // workspace.create_ssh
 // -----------------------------------------------------------------------
 
-pub(super) fn handle_workspace_create_ssh(
+pub(crate) fn handle_workspace_create_ssh(
     id: Value,
     params: &Value,
     state: &Arc<SharedState>,

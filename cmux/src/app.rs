@@ -310,6 +310,13 @@ pub enum UiEvent {
     ReloadTheme,
     /// Show the SSH workspace creation dialog.
     OpenSshDialog,
+    /// Open an SSH workspace from a deep link (cmux://ssh/user@host[:port][/path]).
+    OpenSshDeepLink {
+        /// SSH destination string (e.g. "user@host").
+        destination: String,
+        /// Optional port number.
+        port: Option<u16>,
+    },
     /// Import browser cookies from a local profile (Firefox/Chrome/Chromium).
     /// Must be handled on the GTK main thread.
     #[cfg(feature = "webkit")]
@@ -476,7 +483,7 @@ impl SharedState {
 pub fn run() -> i32 {
     let app = adw::Application::builder()
         .application_id("io.github.douglas.cmux_gtk")
-        .flags(gio::ApplicationFlags::NON_UNIQUE)
+        .flags(gio::ApplicationFlags::NON_UNIQUE | gio::ApplicationFlags::HANDLES_OPEN)
         .build();
 
     let shared = Arc::new(SharedState::new());
@@ -504,6 +511,26 @@ pub fn run() -> i32 {
     app.connect_activate(move |app| {
         activate(app, &state_clone);
     });
+
+    // Handle cmux:// deep links opened via xdg-open / D-Bus.
+    // The .desktop file declares MimeType=x-scheme-handler/cmux so xdg-open
+    // routes cmux:// URIs here.  Since the app is NON_UNIQUE every open call
+    // lands in a fresh process; activate() runs first, then open() is called.
+    {
+        let state_clone = state.clone();
+        app.connect_open(move |_app, files, _hint| {
+            for file in files {
+                let uri = file.uri();
+                let uri_str = uri.as_str();
+                tracing::info!("Deep link received: {}", uri_str);
+                if let Some(event) = parse_deep_link(uri_str) {
+                    state_clone.shared.send_ui_event(event);
+                } else {
+                    tracing::warn!("Unrecognised cmux:// deep link: {}", uri_str);
+                }
+            }
+        });
+    }
 
     {
         let state = state.clone();
@@ -1440,6 +1467,70 @@ impl SendAppPtr {
 
 static GHOSTTY_APP_PTR: Mutex<SendAppPtr> = Mutex::new(SendAppPtr(std::ptr::null_mut()));
 static GHOSTTY_TICK_PENDING: AtomicBool = AtomicBool::new(false);
+
+/// Parse a `cmux://` deep link URI and return the corresponding `UiEvent`.
+///
+/// Supported schemes:
+/// - `cmux://ssh/<user>@<host>[:<port>][/<path>]`
+///   The host portion (`<user>@<host>`) maps directly to the SSH `destination`
+///   parameter.  An optional port in the authority overrides the default SSH port.
+///
+/// Returns `None` for unrecognised or malformed URIs.
+fn parse_deep_link(uri: &str) -> Option<UiEvent> {
+    // Only handle our custom scheme.
+    let rest = uri.strip_prefix("cmux://")?;
+
+    // Extract the first path component as the sub-command.
+    // e.g. "ssh/user@host:22/path" → command="ssh", tail="user@host:22/path"
+    let (command, tail) = rest.split_once('/').unwrap_or((rest, ""));
+
+    match command {
+        "ssh" => {
+            // Strip any trailing path component — we only need the authority.
+            let authority = tail.split('/').next().unwrap_or(tail);
+            if authority.is_empty() {
+                return None;
+            }
+
+            // Parse optional port from "user@host:port".
+            let (destination, port) = if let Some(at_pos) = authority.rfind('@') {
+                let host_part = &authority[at_pos + 1..];
+                if let Some(colon_pos) = host_part.rfind(':') {
+                    let port_str = &host_part[colon_pos + 1..];
+                    let host = &host_part[..colon_pos];
+                    let user = &authority[..at_pos];
+                    if let Ok(p) = port_str.parse::<u16>() {
+                        (format!("{}@{}", user, host), Some(p))
+                    } else {
+                        (authority.to_string(), None)
+                    }
+                } else {
+                    (authority.to_string(), None)
+                }
+            } else {
+                // No "@" — bare host, possibly with port.
+                if let Some(colon_pos) = authority.rfind(':') {
+                    let port_str = &authority[colon_pos + 1..];
+                    let host = &authority[..colon_pos];
+                    if let Ok(p) = port_str.parse::<u16>() {
+                        (host.to_string(), Some(p))
+                    } else {
+                        (authority.to_string(), None)
+                    }
+                } else {
+                    (authority.to_string(), None)
+                }
+            };
+
+            if destination.is_empty() {
+                return None;
+            }
+
+            Some(UiEvent::OpenSshDeepLink { destination, port })
+        }
+        _ => None,
+    }
+}
 
 #[cfg(test)]
 mod tests {
