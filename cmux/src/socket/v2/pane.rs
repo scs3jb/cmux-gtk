@@ -539,3 +539,88 @@ pub(super) fn handle_pane_surfaces(
 
     Response::success(id, serde_json::json!({"surfaces": surfaces}))
 }
+
+/// Move a panel to a specific workspace by UUID.
+///
+/// Params:
+///   - `panel` (optional UUID): panel to move; defaults to the focused panel of
+///     the currently selected workspace.
+///   - `workspace` (required UUID): target workspace UUID.
+pub(super) fn handle_panel_move_to_workspace(
+    id: Value,
+    params: &Value,
+    state: &Arc<SharedState>,
+) -> Response {
+    let panel_id = match resolve_panel_id(&id, params, state) {
+        Ok(pid) => pid,
+        Err(resp) => return resp,
+    };
+
+    let target_ws_str = params
+        .get("workspace")
+        .or_else(|| params.get("target_workspace"))
+        .or_else(|| params.get("target_workspace_id"))
+        .and_then(|v| v.as_str());
+
+    let Some(target_ws_str) = target_ws_str else {
+        return Response::error(id, "invalid_params", "Provide 'workspace' UUID");
+    };
+
+    let target_ws_id = match uuid::Uuid::parse_str(target_ws_str) {
+        Ok(wid) => wid,
+        Err(_) => return Response::error(id, "invalid_params", "Invalid workspace UUID"),
+    };
+
+    let mut tm = lock_or_recover(&state.tab_manager);
+
+    // Verify target exists
+    if tm.workspace(target_ws_id).is_none() {
+        return Response::error(id, "not_found", "Target workspace not found");
+    }
+
+    match tm.move_panel_to_workspace(panel_id, target_ws_id) {
+        Some(wid) => {
+            drop(tm);
+            state.notify_ui_refresh();
+            Response::success(
+                id,
+                serde_json::json!({
+                    "panel_id": panel_id.to_string(),
+                    "workspace_id": wid.to_string(),
+                    "moved": true,
+                }),
+            )
+        }
+        None => Response::error(id, "invalid_params", "Cannot move panel (already in target or not found)"),
+    }
+}
+
+/// Toggle the zoom state of a panel (expand to fill or restore split).
+///
+/// Params:
+///   - `panel` (optional UUID): panel to zoom/unzoom; defaults to focused panel.
+pub(super) fn handle_panel_toggle_zoom(
+    id: Value,
+    params: &Value,
+    state: &Arc<SharedState>,
+) -> Response {
+    let panel_id = match resolve_panel_id(&id, params, state) {
+        Ok(pid) => pid,
+        Err(resp) => return resp,
+    };
+
+    let mut tm = lock_or_recover(&state.tab_manager);
+    if let Some(ws) = tm.find_workspace_with_panel_mut(panel_id) {
+        if ws.zoomed_panel_id == Some(panel_id) {
+            ws.zoomed_panel_id = None;
+        } else {
+            ws.zoomed_panel_id = Some(panel_id);
+        }
+        let zoomed = ws.zoomed_panel_id.is_some();
+        drop(tm);
+        state.notify_ui_refresh();
+        Response::success(id, serde_json::json!({"zoomed": zoomed, "panel_id": panel_id.to_string()}))
+    } else {
+        Response::error(id, "not_found", "Panel not found in any workspace")
+    }
+}

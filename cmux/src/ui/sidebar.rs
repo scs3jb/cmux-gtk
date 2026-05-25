@@ -791,6 +791,32 @@ fn setup_row_context_menu(
     );
     menu.append_section(None, &reorder_menu);
 
+    // Move Focused Pane submenu — "to New Workspace" + flat list of other workspaces
+    {
+        let move_pane_menu = gtk4::gio::Menu::new();
+        move_pane_menu.append(
+            Some("Move to New Workspace"),
+            Some(&format!("sidebar.move-pane-new.{index}")),
+        );
+
+        // Collect other workspaces for the flat list
+        let other_workspaces: Vec<(uuid::Uuid, String)> = {
+            let tm = lock_or_recover(&state.shared.tab_manager);
+            tm.iter()
+                .enumerate()
+                .filter(|(i, _)| *i != index)
+                .map(|(i, ws)| (ws.id, format!("Move to: {} ({})", ws.display_title(), i + 1)))
+                .collect()
+        };
+        for (wid, label) in &other_workspaces {
+            move_pane_menu.append(
+                Some(label),
+                Some(&format!("sidebar.move-pane-to.{index}.{wid}")),
+            );
+        }
+        menu.append_section(None, &move_pane_menu);
+    }
+
     // Move to Window submenu (only when multiple windows exist)
     let window_ids: Vec<uuid::Uuid> = lock_or_recover(&state.shared.window_sizes)
         .keys()
@@ -1017,6 +1043,75 @@ fn setup_row_context_menu(
         });
     }
     action_group.add_action(&move_down_action);
+
+    // Move focused pane to new workspace
+    let move_pane_new_action =
+        gtk4::gio::SimpleAction::new(&format!("move-pane-new.{index}"), None);
+    {
+        let state = state.clone();
+        move_pane_new_action.connect_activate(move |_, _| {
+            use crate::model::panel::LayoutNode;
+            let mut tm = lock_or_recover(&state.shared.tab_manager);
+            let source = tm.get_mut(index);
+            let Some(source) = source else { return };
+            let Some(panel_id) = source.focused_panel_id else {
+                return;
+            };
+            if source.panels.len() <= 1 {
+                return;
+            }
+            let source_dir = source.current_directory.clone();
+            if let Some(panel) = source.detach_panel(panel_id) {
+                let source_ws_id = source.id;
+                if source.is_empty() {
+                    tm.remove_by_id(source_ws_id);
+                }
+                let mut new_ws = crate::model::Workspace::new();
+                // Remove the default panel that Workspace::new() creates
+                let default_pid = new_ws.focused_panel_id;
+                if let Some(dpid) = default_pid {
+                    new_ws.panels.remove(&dpid);
+                }
+                new_ws.current_directory = source_dir;
+                new_ws.panels.insert(panel_id, panel);
+                new_ws.layout = LayoutNode::single_pane(panel_id);
+                new_ws.focused_panel_id = Some(panel_id);
+                let placement = crate::settings::load().new_workspace_placement;
+                tm.add_workspace_with_placement(new_ws, placement);
+            }
+            drop(tm);
+            state.shared.notify_ui_refresh();
+        });
+    }
+    action_group.add_action(&move_pane_new_action);
+
+    // Move focused pane to an existing workspace
+    {
+        let other_workspace_ids: Vec<uuid::Uuid> = {
+            let tm = lock_or_recover(&state.shared.tab_manager);
+            tm.iter()
+                .enumerate()
+                .filter(|(i, _)| *i != index)
+                .map(|(_, ws)| ws.id)
+                .collect()
+        };
+        for target_wid in other_workspace_ids {
+            let action_name = format!("move-pane-to.{index}.{target_wid}");
+            let move_pane_action = gtk4::gio::SimpleAction::new(&action_name, None);
+            {
+                let state = state.clone();
+                move_pane_action.connect_activate(move |_, _| {
+                    let mut tm = lock_or_recover(&state.shared.tab_manager);
+                    let panel_id = tm.get(index).and_then(|ws| ws.focused_panel_id);
+                    let Some(panel_id) = panel_id else { return };
+                    tm.move_panel_to_workspace(panel_id, target_wid);
+                    drop(tm);
+                    state.shared.notify_ui_refresh();
+                });
+            }
+            action_group.add_action(&move_pane_action);
+        }
+    }
 
     // Move to window actions
     for wid in &window_ids {

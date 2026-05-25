@@ -456,6 +456,40 @@ fn build_tab_button(
     }
     tab.add_controller(click);
 
+    // Double-click on tab header → toggle zoom for this panel
+    let dbl_click = gtk4::GestureClick::new();
+    dbl_click.set_button(1);
+    {
+        let state = Rc::clone(state);
+        dbl_click.connect_pressed(move |gesture, n_press, x, _y| {
+            if n_press != 2 {
+                return;
+            }
+            // Don't steal clicks meant for the close button
+            let Some(tab_widget) = gesture.widget() else {
+                return;
+            };
+            // Avoid triggering zoom when clicking the close button area
+            // (close button is the last child; use rough rightmost 28px guard)
+            let tab_width = tab_widget.width() as f64;
+            if tab_width > 0.0 && x >= tab_width - 28.0 {
+                return;
+            }
+            gesture.set_state(gtk4::EventSequenceState::Claimed);
+            let mut tm = lock_or_recover(&state.shared.tab_manager);
+            if let Some(ws) = tm.find_workspace_with_panel_mut(panel_id) {
+                if ws.zoomed_panel_id == Some(panel_id) {
+                    ws.zoomed_panel_id = None;
+                } else {
+                    ws.zoomed_panel_id = Some(panel_id);
+                }
+            }
+            drop(tm);
+            state.shared.notify_ui_refresh();
+        });
+    }
+    tab.add_controller(dbl_click);
+
     // Drag source for reordering
     let drag_source = gtk4::DragSource::new();
     drag_source.set_actions(gdk4::DragAction::MOVE);

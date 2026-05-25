@@ -357,6 +357,50 @@ impl TabManager {
             .iter_mut()
             .find(|w| w.panels.contains_key(&panel_id))
     }
+
+    /// Move a panel from one workspace to another.
+    ///
+    /// Detaches the panel from the source workspace's layout and panel map and
+    /// inserts it into the target workspace (splitting the focused pane
+    /// horizontally). The source workspace is removed if it becomes empty.
+    /// Returns the new workspace ID (target) on success, or `None` if the
+    /// source/target/panel could not be found or the panel is already in the
+    /// target workspace.
+    pub fn move_panel_to_workspace(
+        &mut self,
+        panel_id: Uuid,
+        target_workspace_id: Uuid,
+    ) -> Option<Uuid> {
+        use crate::model::panel::SplitOrientation;
+
+        let source_ws_id = self.find_workspace_with_panel(panel_id).map(|ws| ws.id)?;
+
+        // Reject move to same workspace
+        if source_ws_id == target_workspace_id {
+            return None;
+        }
+
+        // Ensure target exists
+        self.workspace(target_workspace_id)?;
+
+        // Detach from source
+        let panel = self
+            .workspace_mut(source_ws_id)?
+            .detach_panel(panel_id)?;
+
+        let source_empty = self
+            .workspace(source_ws_id)
+            .is_some_and(|ws| ws.is_empty());
+        if source_empty {
+            self.remove_by_id(source_ws_id);
+        }
+
+        // Insert into target
+        let target_ws = self.workspace_mut(target_workspace_id)?;
+        target_ws.insert_panel(panel, SplitOrientation::Horizontal);
+
+        Some(target_workspace_id)
+    }
 }
 
 impl Default for TabManager {
