@@ -78,17 +78,60 @@ pub(super) fn handle_notification_create(
             .workspace_mut(target_workspace_id)
             .expect("workspace validated above");
         let resolved_panel_id = panel_id.filter(|id| workspace.panels.contains_key(id));
+
+        // Suppress notifications from nested/sub-agent panels (Task 2).
+        // When a top-level agent (e.g. Claude Code) spawns a sub-agent shell,
+        // the sub-agent panel has parent_panel_id set.  Hook events from that
+        // sub-shell should not pollute the notification panel.
+        if let Some(pid) = resolved_panel_id {
+            if let Some(panel) = workspace.panels.get(&pid) {
+                if panel.parent_panel_id.is_some() {
+                    tracing::debug!(
+                        %pid,
+                        parent = ?panel.parent_panel_id,
+                        "notification suppressed for nested agent panel"
+                    );
+                    return Response::success(
+                        id,
+                        serde_json::json!({
+                            "notified": false,
+                            "suppressed": true,
+                            "reason": "nested_agent_panel",
+                            "workspace": target_workspace_id.to_string(),
+                            "workspace_id": target_workspace_id.to_string(),
+                            "surface": pid.to_string(),
+                        }),
+                    );
+                }
+            }
+        }
+
+        // Detect whether the source panel is running a Codex agent, so we can
+        // set retain_on_interrupt on the notification (Task 1).
+        let is_codex_panel = resolved_panel_id
+            .and_then(|pid| workspace.panels.get(&pid))
+            .map(|panel| {
+                crate::session::snapshot::detect_agent_resume_command(
+                    panel.title.as_deref(),
+                    panel.command.as_deref(),
+                )
+                .as_deref()
+                == Some("codex")
+            })
+            .unwrap_or(false);
+
         workspace.record_notification(title, body, resolved_panel_id);
-        (target_workspace_id, resolved_panel_id)
+        (target_workspace_id, resolved_panel_id, is_codex_panel)
     };
 
-    let (target_workspace_id, resolved_panel_id) = target;
-    lock_or_recover(&state.notifications).add(
+    let (target_workspace_id, resolved_panel_id, is_codex_panel) = target;
+    lock_or_recover(&state.notifications).add_with_retain(
         title,
         body,
         Some(target_workspace_id),
         resolved_panel_id,
         send_desktop,
+        is_codex_panel,
     );
 
     // Auto-reorder: move notified workspace toward the top (after pinned items)
@@ -232,9 +275,16 @@ pub(super) fn handle_notification_dismiss(
             return e;
         }
     };
-    let removed = lock_or_recover(&state.notifications).dismiss(notif_id);
+    // `force: true` overrides retain_on_interrupt (explicit user dismiss).
+    // Codex CLI auto-dismiss on interrupt does NOT set force, so retained
+    // notifications survive an interrupted turn.
+    let force = params
+        .get("force")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let removed = lock_or_recover(&state.notifications).dismiss(notif_id, force);
     if !removed {
-        return Response::error(id, "not_found", "Notification not found");
+        return Response::error(id, "not_found", "Notification not found or protected");
     }
     state.notify_ui_refresh();
     Response::success(id, serde_json::json!({"ok": true}))

@@ -13,6 +13,14 @@ pub struct Notification {
     pub source_panel_id: Option<Uuid>,
     pub timestamp: f64,
     pub is_read: bool,
+    /// When `true`, automatic (non-user-initiated) dismiss calls are ignored.
+    ///
+    /// Set for Codex agent panels so that interrupted turns do not silently
+    /// remove the notification — the user can still see context after Ctrl+C.
+    /// Explicit user-initiated dismisses (e.g. via `notification.dismiss` with
+    /// `force: true`) still remove the notification regardless of this flag.
+    #[serde(default)]
+    pub retain_on_interrupt: bool,
 }
 
 /// Notification store — keeps track of all notifications.
@@ -39,6 +47,19 @@ impl NotificationStore {
         panel_id: Option<Uuid>,
         send_desktop: bool,
     ) -> Uuid {
+        self.add_with_retain(title, body, workspace_id, panel_id, send_desktop, false)
+    }
+
+    /// Add a notification with full control over `retain_on_interrupt`.
+    pub fn add_with_retain(
+        &mut self,
+        title: &str,
+        body: &str,
+        workspace_id: Option<Uuid>,
+        panel_id: Option<Uuid>,
+        send_desktop: bool,
+        retain_on_interrupt: bool,
+    ) -> Uuid {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -54,6 +75,7 @@ impl NotificationStore {
             source_panel_id: panel_id,
             timestamp: now,
             is_read: false,
+            retain_on_interrupt,
         };
 
         let id = notification.id;
@@ -122,9 +144,20 @@ impl NotificationStore {
     }
 
     /// Remove a notification by ID. Returns true if it was found and removed.
-    pub fn dismiss(&mut self, id: Uuid) -> bool {
+    ///
+    /// If the notification has `retain_on_interrupt: true` and `force` is `false`,
+    /// the dismiss is silently ignored (returns `false`).  Pass `force: true` for
+    /// explicit user-initiated dismisses that should always remove the notification.
+    pub fn dismiss(&mut self, id: Uuid, force: bool) -> bool {
         let before = self.notifications.len();
-        self.notifications.retain(|n| n.id != id);
+        self.notifications.retain(|n| {
+            if n.id != id {
+                return true; // keep — different notification
+            }
+            // This is the target notification.  Keep it (i.e. do NOT remove) when
+            // retain_on_interrupt is set and the dismiss is not force-initiated.
+            n.retain_on_interrupt && !force
+        });
         self.notifications.len() < before
     }
 
