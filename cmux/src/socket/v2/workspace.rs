@@ -1834,3 +1834,129 @@ pub(super) fn handle_app_simulate_active(
     // Simulate app activation — on Linux/GTK this is a no-op for protocol parity.
     Response::success(id, serde_json::json!({"ok": true}))
 }
+
+// -----------------------------------------------------------------------
+// workspace.files
+// -----------------------------------------------------------------------
+
+/// List the directory tree of the workspace's `current_directory` (or an
+/// explicit `path` param) up to `depth` levels (default 2, max 5).
+///
+/// Request:
+/// ```json
+/// {"id":1,"method":"workspace.files","params":{"path":"/optional","depth":2}}
+/// ```
+///
+/// Response:
+/// ```json
+/// {"ok":true,"result":{"path":"/home/user/project","entries":[
+///   {"name":"src","path":"…/src","type":"directory","children":[…]},
+///   {"name":"main.rs","path":"…/main.rs","type":"file"}
+/// ]}}
+/// ```
+pub(super) fn handle_workspace_files(
+    id: Value,
+    params: &Value,
+    state: &Arc<SharedState>,
+) -> Response {
+    let ws_id = match parse_workspace_param(params) {
+        Ok(v) => v,
+        Err(()) => return Response::error(id, "invalid_params", "Invalid workspace UUID"),
+    };
+
+    // Resolve the workspace and check for SSH
+    let (root_path, is_remote) = {
+        let tm = lock_or_recover(&state.tab_manager);
+        let ws = if let Some(wid) = ws_id {
+            tm.workspace(wid)
+        } else {
+            tm.selected()
+        };
+        let Some(ws) = ws else {
+            return Response::error(id, "not_found", "No workspace found");
+        };
+        let path = params
+            .get("path")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+            .unwrap_or_else(|| ws.current_directory.clone());
+        (path, ws.remote_config.is_some())
+    };
+
+    if is_remote {
+        return Response::error(
+            id,
+            "not_supported",
+            "File browsing is not available for SSH workspaces",
+        );
+    }
+
+    let depth = params
+        .get("depth")
+        .and_then(|v| v.as_u64())
+        .map(|d| d.min(5) as u32)
+        .unwrap_or(2);
+
+    let entries = files_tree(&root_path, depth, 0);
+
+    Response::success(
+        id,
+        serde_json::json!({
+            "path": root_path,
+            "entries": entries,
+        }),
+    )
+}
+
+fn files_tree(dir_path: &str, max_depth: u32, current_depth: u32) -> Vec<Value> {
+    use std::path::Path;
+
+    if current_depth >= max_depth {
+        return Vec::new();
+    }
+
+    let Ok(read_dir) = std::fs::read_dir(Path::new(dir_path)) else {
+        return Vec::new();
+    };
+
+    let mut dirs: Vec<(String, String)> = Vec::new();
+    let mut files: Vec<(String, String)> = Vec::new();
+
+    for entry in read_dir.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with('.') {
+            continue;
+        }
+        let full = entry.path().to_string_lossy().into_owned();
+        match entry.file_type() {
+            Ok(ft) if ft.is_dir() => dirs.push((name, full)),
+            Ok(_) => files.push((name, full)),
+            Err(_) => {}
+        }
+    }
+
+    dirs.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+    files.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+
+    let mut result = Vec::new();
+
+    for (name, full) in dirs {
+        let children = files_tree(&full, max_depth, current_depth + 1);
+        result.push(serde_json::json!({
+            "name": name,
+            "path": full,
+            "type": "directory",
+            "children": children,
+        }));
+    }
+
+    for (name, full) in files {
+        result.push(serde_json::json!({
+            "name": name,
+            "path": full,
+            "type": "file",
+        }));
+    }
+
+    result
+}

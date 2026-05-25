@@ -703,6 +703,24 @@ fn create_workspace_row(
         }
     }
 
+    // ── File explorer (collapsible) ──
+    if !sidebar.hide_all_details {
+        let expander = gtk4::Expander::new(Some("Files"));
+        expander.add_css_class("caption");
+        expander.set_margin_top(2);
+
+        if workspace.remote_config.is_some() {
+            let placeholder = crate::ui::file_explorer::FileExplorer::new_ssh_placeholder();
+            expander.set_child(Some(placeholder.widget()));
+        } else {
+            let explorer = crate::ui::file_explorer::FileExplorer::new();
+            explorer.set_root(&workspace.current_directory);
+            expander.set_child(Some(explorer.widget()));
+        }
+
+        outer.append(&expander);
+    }
+
     // ── Hover show/hide close button ──
     let motion = gtk4::EventControllerMotion::new();
     {
