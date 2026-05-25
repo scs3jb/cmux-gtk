@@ -1712,6 +1712,18 @@ pub(super) fn handle_settings_open(id: Value, state: &Arc<SharedState>) -> Respo
 }
 
 // -----------------------------------------------------------------------
+// settings.reload
+// -----------------------------------------------------------------------
+
+/// Re-apply the theme from settings and notify ghostty of the current
+/// dark/light state.  Useful for scripting or after editing settings.json
+/// directly when the Settings window is not open.
+pub(super) fn handle_settings_reload(id: Value, state: &Arc<SharedState>) -> Response {
+    state.send_ui_event(UiEvent::ReloadTheme);
+    Response::success(id, serde_json::json!({"reloaded": true}))
+}
+
+// -----------------------------------------------------------------------
 // app.focus_override.set
 // -----------------------------------------------------------------------
 

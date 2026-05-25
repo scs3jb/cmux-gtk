@@ -86,6 +86,7 @@ pub(super) fn handle_capabilities(id: Value) -> Response {
         "workspace.report_tty",
         "workspace.ports_kick",
         "settings.open",
+        "settings.reload",
         "notification.create",
         "notification.create_for_surface",
         "notification.create_for_target",

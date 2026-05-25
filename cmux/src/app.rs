@@ -305,6 +305,9 @@ pub enum UiEvent {
     CreateWindow,
     /// Reload ghostty configuration from disk.
     ReloadConfig,
+    /// Re-apply the app theme from settings (adw color scheme + ghostty color scheme).
+    /// Used by the `settings.reload` socket command and the Omarchy SIGUSR2 path.
+    ReloadTheme,
     /// Show the SSH workspace creation dialog.
     OpenSshDialog,
     /// Import browser cookies from a local profile (Firefox/Chrome/Chromium).
@@ -990,6 +993,9 @@ extern "C" fn sigusr2_handler(_sig: libc::c_int) {
 }
 
 /// Apply the current theme from settings. Handles System/Light/Dark/Omarchy modes.
+/// Also notifies ghostty of the resolved dark/light state so that conditional
+/// theme values like `dark:Dracula|light:GitHub` in `~/.config/ghostty/config`
+/// are resolved correctly.
 pub fn apply_theme_from_settings() {
     let settings = crate::settings::load();
     let Some(display) = gdk4::Display::default() else {
@@ -1075,6 +1081,29 @@ pub fn apply_theme_from_settings() {
                     &provider,
                     gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION + 1,
                 );
+            }
+        }
+    }
+
+    // Notify ghostty of the resolved dark/light state so that conditional
+    // theme values like `dark:Dracula|light:GitHub` in the ghostty config are
+    // picked up on the next config reload.
+    #[cfg(feature = "link-ghostty")]
+    {
+        use ghostty_sys::*;
+        let is_dark = style_manager.is_dark();
+        let scheme = if is_dark {
+            ghostty_color_scheme_e::GHOSTTY_COLOR_SCHEME_DARK
+        } else {
+            ghostty_color_scheme_e::GHOSTTY_COLOR_SCHEME_LIGHT
+        };
+        if let Ok(app_ptr) = GHOSTTY_APP_PTR.lock() {
+            if !app_ptr.is_null() {
+                // SAFETY: app_ptr is non-null (checked above) and this is called on the
+                // GTK main thread. ghostty_app_set_color_scheme is safe to call here.
+                unsafe {
+                    ghostty_app_set_color_scheme(app_ptr.0, scheme);
+                }
             }
         }
     }

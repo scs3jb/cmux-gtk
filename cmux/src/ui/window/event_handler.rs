@@ -426,6 +426,10 @@ pub(super) fn bind_shared_state_updates(
                         }
                         super::refresh_ui(&list_box, &content_box, &state);
                     }
+                    UiEvent::ReloadTheme => {
+                        tracing::info!("ReloadTheme: re-applying theme from settings");
+                        crate::app::apply_theme_from_settings();
+                    }
                     UiEvent::DesktopNotification {
                         surface,
                         title,

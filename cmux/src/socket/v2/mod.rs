@@ -225,6 +225,7 @@ pub fn dispatch(json_line: &str, state: &Arc<SharedState>) -> Response {
 
         // Settings
         "settings.open" => workspace::handle_settings_open(id, state),
+        "settings.reload" => workspace::handle_settings_reload(id, state),
 
         // Notification commands
         "notification.create" => notification::handle_notification_create(id, &req.params, state),

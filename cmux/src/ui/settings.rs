@@ -68,6 +68,56 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
 
     appearance_page.add(&theme_group);
 
+    // ── Ghostty Terminal Themes group ──
+    // Discover theme names available in the user's ghostty themes directory
+    // and the system themes directory. These are the names you can set in
+    // ~/.config/ghostty/config as `theme = <name>` or as a conditional
+    // `theme = dark:<name>|light:<name>`.
+    {
+        let ghostty_theme_group = adw::PreferencesGroup::new();
+        ghostty_theme_group.set_title("Ghostty Terminal Themes");
+        ghostty_theme_group.set_description(Some(
+            "Themes available for ~/.config/ghostty/config. \
+             Use `theme = Name` or `theme = dark:DarkName|light:LightName`.",
+        ));
+
+        // Collect user themes from ~/.config/ghostty/themes/
+        let user_themes = discover_ghostty_user_themes();
+        // Collect system themes from GHOSTTY_RESOURCES_DIR/themes/ or /usr/share/ghostty/themes/
+        let system_themes = discover_ghostty_system_themes();
+
+        if user_themes.is_empty() && system_themes.is_empty() {
+            let empty_row = adw::ActionRow::new();
+            empty_row.set_title("No themes found");
+            empty_row.set_subtitle("Add themes to ~/.config/ghostty/themes/");
+            ghostty_theme_group.add(&empty_row);
+        } else {
+            if !user_themes.is_empty() {
+                let user_row = adw::ActionRow::new();
+                user_row.set_title("My Themes");
+                user_row.set_subtitle(&user_themes.join(", "));
+                ghostty_theme_group.add(&user_row);
+            }
+            if !system_themes.is_empty() {
+                let sys_row = adw::ActionRow::new();
+                sys_row.set_title("Built-in Themes");
+                let preview = if system_themes.len() > 8 {
+                    format!(
+                        "{} … ({} total)",
+                        system_themes[..8].join(", "),
+                        system_themes.len()
+                    )
+                } else {
+                    system_themes.join(", ")
+                };
+                sys_row.set_subtitle(&preview);
+                ghostty_theme_group.add(&sys_row);
+            }
+        }
+
+        appearance_page.add(&ghostty_theme_group);
+    }
+
     // ── Behavior group ──
     let behavior_group = adw::PreferencesGroup::new();
     behavior_group.set_title("Behavior");
@@ -989,4 +1039,49 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
     });
 
     window.present();
+}
+
+// ── Theme discovery helpers ──────────────────────────────────────────────────
+
+/// Collect file names (without extension) from a ghostty themes directory.
+fn collect_theme_names(dir: &std::path::Path) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return vec![];
+    };
+    let mut names: Vec<String> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name();
+            let s = name.to_str()?;
+            if s.starts_with('.') {
+                return None;
+            }
+            // Strip any file extension (ghostty themes have no extension, but
+            // be lenient if someone adds .conf or similar)
+            let stem = std::path::Path::new(s)
+                .file_stem()
+                .and_then(|n| n.to_str())
+                .unwrap_or(s);
+            Some(stem.to_string())
+        })
+        .collect();
+    names.sort();
+    names
+}
+
+/// Discover user-defined ghostty themes from `~/.config/ghostty/themes/`.
+pub fn discover_ghostty_user_themes() -> Vec<String> {
+    let dir = dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("~/.config"))
+        .join("ghostty/themes");
+    collect_theme_names(&dir)
+}
+
+/// Discover built-in ghostty themes from the system themes directory.
+/// Checks `$GHOSTTY_RESOURCES_DIR/themes/` first, then `/usr/share/ghostty/themes/`.
+pub fn discover_ghostty_system_themes() -> Vec<String> {
+    let dir = std::env::var("GHOSTTY_RESOURCES_DIR")
+        .map(|d| std::path::PathBuf::from(d).join("themes"))
+        .unwrap_or_else(|_| std::path::PathBuf::from("/usr/share/ghostty/themes"));
+    collect_theme_names(&dir)
 }
