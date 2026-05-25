@@ -1391,6 +1391,11 @@ impl ghostty_gtk::callbacks::GhosttyCallbackHandler for CmuxCallbackHandler {
                 });
                 true
             }
+            // Ghostty notifies the host when the scrollbar state changes (e.g.
+            // on alt-screen enter/exit, or when the scrollback buffer grows).
+            // cmux does not render its own scrollbar — ghostty draws entirely
+            // within the GLArea — so we acknowledge the action and do nothing.
+            ghostty_action_tag_e::GHOSTTY_ACTION_SCROLLBAR => true,
             ghostty_action_tag_e::GHOSTTY_ACTION_OPEN_URL => {
                 // SAFETY: action tag is OPEN_URL so the union contains open_url.
                 // Pointer and length are null/zero-checked. from_raw_parts requires
