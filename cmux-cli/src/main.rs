@@ -1,6 +1,7 @@
 //! cmux CLI — command-line client for the cmux socket API.
 
 mod commands;
+mod config;
 mod format;
 mod rpc;
 
@@ -30,8 +31,29 @@ fn main() -> anyhow::Result<()> {
         return format::run_themes(filter.as_deref());
     }
 
+    if let Commands::Config(cmd) = &cli.command {
+        match cmd {
+            ConfigCommands::Path => return config::run_path(),
+            ConfigCommands::Doctor => return config::run_doctor(),
+            ConfigCommands::Docs => return config::run_docs(),
+            ConfigCommands::Reload => {
+                let response = rpc::send_request(&cli.socket, "settings.open", serde_json::json!({}))?;
+                if cli.json {
+                    println!("{}", serde_json::to_string_pretty(&response)?);
+                } else if response.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+                    println!("Config reloaded.");
+                } else {
+                    eprintln!("Reload failed.");
+                    std::process::exit(1);
+                }
+                return Ok(());
+            }
+        }
+    }
+
     let (method, params) = match &cli.command {
         Commands::Themes { .. } => unreachable!(),
+        Commands::Config(_) => unreachable!(),
         Commands::Ping => ("system.ping", serde_json::json!({})),
         Commands::Capabilities => ("system.capabilities", serde_json::json!({})),
         Commands::Identify => ("system.identify", serde_json::json!({})),

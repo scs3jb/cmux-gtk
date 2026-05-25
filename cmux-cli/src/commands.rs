@@ -73,6 +73,22 @@ pub enum Commands {
         #[arg(long, short)]
         filter: Option<String>,
     },
+
+    /// Configuration management
+    #[command(subcommand)]
+    Config(ConfigCommands),
+}
+
+#[derive(Subcommand)]
+pub enum ConfigCommands {
+    /// Validate the configuration file
+    Doctor,
+    /// Print the config file path
+    Path,
+    /// Show documentation URL
+    Docs,
+    /// Reload config in running instance
+    Reload,
 }
 
 #[derive(Subcommand)]
