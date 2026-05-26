@@ -290,6 +290,16 @@ fn create_browser_widget(
     is_attention_source: bool,
     state: &std::rc::Rc<crate::app::AppState>,
 ) -> gtk4::Widget {
+    // If browser is disabled at runtime, show a placeholder label.
+    if !crate::settings::load().browser.enabled {
+        let label = gtk4::Label::new(Some(
+            "Browser disabled. Enable in Settings \u{2192} Browser.",
+        ));
+        label.set_hexpand(true);
+        label.set_vexpand(true);
+        return label.upcast();
+    }
+
     // Reuse cached browser widget if available (survives layout rebuilds).
     if let Some(widget) = state.get_cached_browser(panel.id) {
         return widget;

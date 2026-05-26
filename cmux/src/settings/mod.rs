@@ -264,6 +264,10 @@ pub enum SocketAccess {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BrowserSettings {
+    /// Enable the browser panel engine at runtime.
+    /// When false, browser panels show a placeholder instead of WebKit.
+    #[serde(default = "bool_true")]
+    pub enabled: bool,
     /// Default search engine for non-URL queries.
     pub search_engine: SearchEngine,
     /// Home page URL (shown when clicking home button).
@@ -280,9 +284,14 @@ pub struct BrowserSettings {
     pub memory_saver_enabled: bool,
 }
 
+fn bool_true() -> bool {
+    true
+}
+
 impl Default for BrowserSettings {
     fn default() -> Self {
         Self {
+            enabled: true,
             search_engine: SearchEngine::DuckDuckGo,
             home_url: "https://duckduckgo.com".to_string(),
             search_suggestions: true,

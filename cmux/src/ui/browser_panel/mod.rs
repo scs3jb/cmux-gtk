@@ -357,6 +357,10 @@ pub fn create_browser_widget_with_profile(
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 \
              (KHTML, like Gecko) Chrome/131.0.0.0 Safari/605.1.15",
         ));
+        // Allow file:// pages to make cross-origin requests (needed for
+        // local dev tools and docs viewers that load scripts from other
+        // file:// origins).
+        ws.set_allow_universal_access_from_file_urls(true);
     }
 
     // Apply dark mode stylesheet if system is dark
@@ -708,13 +712,25 @@ pub fn create_browser_widget_with_profile(
                                     if url.starts_with("http://") {
                                         let host = util::extract_host(&url);
                                         if !host.is_empty() {
-                                            let is_allowed = matches!(
-                                                host.as_str(),
+                                            // Strip port for domain matching
+                                            let host_no_port = host
+                                                .rsplit_once(':')
+                                                .map(|(h, _)| h)
+                                                .unwrap_or(&host);
+                                            // Built-in allowlist: loopback + *.localhost,
+                                            // *.local, localhost, and *.test are always
+                                            // treated as secure development origins.
+                                            let is_builtin_local = matches!(
+                                                host_no_port,
                                                 "localhost"
                                                     | "127.0.0.1"
                                                     | "::1"
                                                     | "0.0.0.0"
-                                            ) || settings_for_policy
+                                            ) || host_no_port.ends_with(".localhost")
+                                                || host_no_port.ends_with(".local")
+                                                || host_no_port.ends_with(".test");
+                                            let is_allowed = is_builtin_local
+                                                || settings_for_policy
                                                 .http_allowlist
                                                 .iter()
                                                 .any(|pat| {
@@ -725,12 +741,12 @@ pub fn create_browser_widget_with_profile(
                                                         // sub.example.com and
                                                         // example.com, but NOT
                                                         // notexample.com.
-                                                        host == suffix
-                                                            || host.ends_with(
+                                                        host_no_port == suffix
+                                                            || host_no_port.ends_with(
                                                                 &format!(".{suffix}"),
                                                             )
                                                     } else {
-                                                        host == *pat
+                                                        host_no_port == pat.as_str()
                                                     }
                                                 });
                                             if !is_allowed {
@@ -746,7 +762,8 @@ pub fn create_browser_widget_with_profile(
                                         }
                                     }
 
-                                    // Ctrl+click or middle-click -> new tab
+                                    // Ctrl+click on a file:// URI — open with xdg-open
+                                    // instead of navigating (e.g. PDFs, images, text).
                                     let mouse_button = nav_action.mouse_button();
                                     let modifiers = nav_action.modifiers();
                                     let ctrl_mask =
@@ -755,6 +772,26 @@ pub fn create_browser_widget_with_profile(
                                         (modifiers & ctrl_mask) != 0
                                             && mouse_button == 1;
                                     let is_middle_click = mouse_button == 2;
+
+                                    if is_ctrl_click && url.starts_with("file://") {
+                                        // Extract the filesystem path and open it
+                                        // externally so the OS picks the right viewer.
+                                        let path = url
+                                            .strip_prefix("file://")
+                                            .unwrap_or("")
+                                            .to_string();
+                                        if !path.is_empty() {
+                                            tracing::debug!(
+                                                %url,
+                                                "Ctrl+click file:// \u{2192} xdg-open"
+                                            );
+                                            decision.ignore();
+                                            let _ = std::process::Command::new("xdg-open")
+                                                .arg(&path)
+                                                .spawn();
+                                            return true;
+                                        }
+                                    }
 
                                     if is_ctrl_click || is_middle_click {
                                         if let Some(ref shared) =

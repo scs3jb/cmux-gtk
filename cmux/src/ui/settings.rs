@@ -421,6 +421,12 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
     let browser_group = adw::PreferencesGroup::new();
     browser_group.set_title("Browser Panel");
 
+    let browser_enabled_row = adw::SwitchRow::new();
+    browser_enabled_row.set_title("Enable Browser");
+    browser_enabled_row.set_subtitle("Enable the built-in browser engine (takes effect on next open)");
+    browser_enabled_row.set_active(current_settings.browser.enabled);
+    browser_group.add(&browser_enabled_row);
+
     let engine_row = adw::ComboRow::new();
     engine_row.set_title("Search Engine");
     engine_row.set_subtitle("Default search engine for URL bar queries");
@@ -1021,6 +1027,7 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
                     match_terminal_background: match_terminal_bg_row.is_active(),
                 },
                 browser: BrowserSettings {
+                    enabled: browser_enabled_row.is_active(),
                     search_engine: SearchEngine::from_index(engine_row.selected()),
                     home_url,
                     search_suggestions: suggestions_row.is_active(),
