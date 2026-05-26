@@ -214,6 +214,7 @@ pub fn dispatch(json_line: &str, state: &Arc<SharedState>) -> Response {
 
         // Pane commands
         "pane.new" => pane::handle_pane_new(id, &req.params, state),
+        "pane.split_off" => pane::handle_pane_split_off(id, &req.params, state),
         "pane.list" => pane::handle_pane_list(id, &req.params, state),
         "pane.focus" => pane::handle_pane_focus(id, &req.params, state),
         "pane.close" => pane::handle_pane_close(id, &req.params, state),

@@ -27,6 +27,41 @@ pub(super) fn handle_pane_new(id: Value, params: &Value, state: &Arc<SharedState
     }
 }
 
+/// Split the selected workspace and keep focus on the previously focused panel.
+///
+/// Params:
+///   - `orientation` ("horizontal" | "vertical", default: "horizontal")
+///
+/// Unlike `pane.new`, this does NOT move focus to the new panel — the active
+/// panel is unchanged after the split.
+pub(super) fn handle_pane_split_off(
+    id: Value,
+    params: &Value,
+    state: &Arc<SharedState>,
+) -> Response {
+    let orientation = match params.get("orientation").and_then(|v| v.as_str()) {
+        Some("horizontal") => SplitOrientation::Horizontal,
+        Some("vertical") => SplitOrientation::Vertical,
+        _ => SplitOrientation::Horizontal,
+    };
+
+    let mut tm = lock_or_recover(&state.tab_manager);
+    if let Some(ws) = tm.selected_mut() {
+        // Preserve focused panel before the split
+        let focused_before = ws.focused_panel_id;
+        let new_panel_id = ws.split(orientation, PanelType::Terminal);
+        // Restore focus to the panel that was active before the split
+        if let Some(pid) = focused_before {
+            ws.focus_panel(pid);
+        }
+        drop(tm);
+        state.notify_ui_refresh();
+        Response::success(id, serde_json::json!({"panel_id": new_panel_id.to_string()}))
+    } else {
+        Response::error(id, "not_found", "No workspace selected")
+    }
+}
+
 pub(super) fn handle_pane_list(id: Value, params: &Value, state: &Arc<SharedState>) -> Response {
     let ws_id = match parse_workspace_param(params) {
         Ok(v) => v,

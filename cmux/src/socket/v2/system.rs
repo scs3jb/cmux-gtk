@@ -290,6 +290,7 @@ pub(super) fn handle_capabilities(id: Value) -> Response {
         "app.focus_override.set",
         "app.simulate_active",
         "pane.new",
+        "pane.split_off",
         "pane.list",
         "pane.focus",
         "pane.close",

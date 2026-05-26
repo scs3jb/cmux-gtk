@@ -516,6 +516,9 @@ pub struct SidebarDisplaySettings {
     pub tint_color_light: String,
     /// Sidebar tint color for dark mode. Overrides `tint_color` when in dark mode.
     pub tint_color_dark: String,
+    /// Opacity applied to the sidebar tint color (0.0–1.0). Default: 0.85.
+    #[serde(default = "default_tint_opacity")]
+    pub tint_opacity: f32,
     /// When true, port badge clicks open localhost URLs in the system browser
     /// instead of the cmux built-in browser panel.
     pub port_link_external: bool,
@@ -544,6 +547,7 @@ impl Default for SidebarDisplaySettings {
             tint_color: String::new(),
             tint_color_light: String::new(),
             tint_color_dark: String::new(),
+            tint_opacity: default_tint_opacity(),
             port_link_external: false,
             selection_color: String::new(),
             match_terminal_background: false,
@@ -692,6 +696,10 @@ impl AgentRestoreSettings {
             false
         }
     }
+}
+
+fn default_tint_opacity() -> f32 {
+    0.85
 }
 
 fn default_resume_command_approvals() -> Vec<String> {

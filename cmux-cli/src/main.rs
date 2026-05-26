@@ -500,10 +500,17 @@ fn main() -> anyhow::Result<()> {
         Commands::Workspace(ws) => match ws {
             WorkspaceCommands::List => ("workspace.list", serde_json::json!({})),
             WorkspaceCommands::Current => ("workspace.current", serde_json::json!({})),
-            WorkspaceCommands::New { directory, title } => (
-                "workspace.new",
-                serde_json::json!({"directory": directory, "title": title}),
-            ),
+            WorkspaceCommands::New { directory, title, layout } => {
+                // Use workspace.create when a non-single layout is requested so
+                // the server can apply the layout after the workspace is created.
+                let method = if layout == "single" { "workspace.new" } else { "workspace.create" };
+                let params = serde_json::json!({
+                    "directory": directory,
+                    "title": title,
+                    "layout": layout,
+                });
+                (method, params)
+            }
             WorkspaceCommands::Select { index } => {
                 ("workspace.select", serde_json::json!({"index": index}))
             }
@@ -743,6 +750,10 @@ fn main() -> anyhow::Result<()> {
             PaneCommands::Surfaces { panel } => {
                 ("pane.surfaces", serde_json::json!({"panel": panel}))
             }
+            PaneCommands::SplitOff { direction } => (
+                "pane.split_off",
+                serde_json::json!({"orientation": direction}),
+            ),
         },
 
         Commands::Notification(notif) => match notif {

@@ -289,6 +289,22 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
     selection_color_row.set_text(&current_settings.sidebar.selection_color);
     sidebar_group.add(&selection_color_row);
 
+    let tint_opacity_row = adw::SpinRow::new(
+        Some(&gtk4::Adjustment::new(
+            current_settings.sidebar.tint_opacity as f64,
+            0.0,
+            1.0,
+            0.05,
+            0.1,
+            0.0,
+        )),
+        0.05,
+        2,
+    );
+    tint_opacity_row.set_title("Tint Opacity");
+    tint_opacity_row.set_subtitle("Opacity of the sidebar tint color (0.0–1.0)");
+    sidebar_group.add(&tint_opacity_row);
+
     let match_terminal_bg_row = adw::SwitchRow::new();
     match_terminal_bg_row.set_title("Match Terminal Background");
     match_terminal_bg_row.set_subtitle("Use the terminal's background color for the sidebar");
@@ -1022,6 +1038,7 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
                     tint_color: current_settings.sidebar.tint_color.clone(),
                     tint_color_light: current_settings.sidebar.tint_color_light.clone(),
                     tint_color_dark: current_settings.sidebar.tint_color_dark.clone(),
+                    tint_opacity: tint_opacity_row.value() as f32,
                     port_link_external: port_external_row.is_active(),
                     selection_color: selection_color_row.text().to_string(),
                     match_terminal_background: match_terminal_bg_row.is_active(),

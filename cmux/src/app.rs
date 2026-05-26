@@ -1189,6 +1189,41 @@ pub fn apply_theme_from_settings() {
         );
     }
 
+    // Apply sidebar tint color (with opacity) when set.
+    // Prefer the light/dark variant over the fallback tint_color.
+    {
+        let style_manager = adw::StyleManager::for_display(&display);
+        let effective_tint = if style_manager.is_dark() {
+            if !settings.sidebar.tint_color_dark.is_empty() {
+                Some(settings.sidebar.tint_color_dark.clone())
+            } else if !settings.sidebar.tint_color.is_empty() {
+                Some(settings.sidebar.tint_color.clone())
+            } else {
+                None
+            }
+        } else if !settings.sidebar.tint_color_light.is_empty() {
+            Some(settings.sidebar.tint_color_light.clone())
+        } else if !settings.sidebar.tint_color.is_empty() {
+            Some(settings.sidebar.tint_color.clone())
+        } else {
+            None
+        };
+        if let Some(ref color) = effective_tint {
+            let opacity = settings.sidebar.tint_opacity;
+            let css = format!(
+                ".navigation-sidebar {{ background-color: alpha({color}, {opacity:.2}); }}\n\
+                 .navigation-sidebar.backdrop {{ background-color: alpha({color}, {opacity:.2}); }}\n"
+            );
+            let provider = gtk4::CssProvider::new();
+            provider.load_from_data(&css);
+            gtk4::style_context_add_provider_for_display(
+                &display,
+                &provider,
+                gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION + 1,
+            );
+        }
+    }
+
     // Apply custom sidebar selection color if set (overrides theme default)
     let sel = &settings.sidebar.selection_color;
     if !sel.is_empty() {
@@ -1503,6 +1538,19 @@ impl ghostty_gtk::callbacks::GhosttyCallbackHandler for CmuxCallbackHandler {
                 }
                 true
             }
+            // copy_on_select: automatically copy terminal selection to the clipboard.
+            //
+            // Ghostty does not yet expose a selection-changed action or a
+            // `ghostty_surface_get_selection_text` FFI function that fires when the
+            // user finishes a mouse-drag selection. When such a signal is available,
+            // the handler should:
+            //
+            //   1. Check `crate::settings::load().copy_on_select`.
+            //   2. Call `ghostty_surface_get_selection_text(surface_ptr)` to read the text.
+            //   3. Set the clipboard: `gdk4::Display::default().unwrap().clipboard().set_text(&text)`.
+            //
+            // TODO: wire when ghostty exposes a selection-changed FFI (e.g.
+            //       GHOSTTY_ACTION_SELECTION_CHANGED or ghostty_surface_get_selection_text).
             _ => {
                 tracing::trace!("Unhandled ghostty action: {:?}", action.tag as u32);
                 false

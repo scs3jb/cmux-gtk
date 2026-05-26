@@ -61,7 +61,92 @@ pub(super) fn handle_workspace_create(
     params: &Value,
     state: &Arc<SharedState>,
 ) -> Response {
-    create_workspace(id, params, state, true)
+    // Read optional layout string before delegating to create_workspace.
+    // Accepted values: "single" (default), "horizontal-2", "vertical-2", "grid-4".
+    let layout = params
+        .get("layout")
+        .and_then(|v| v.as_str())
+        .unwrap_or("single")
+        .to_string();
+
+    let resp = create_workspace(id, params, state, true);
+
+    // If create succeeded and a non-single layout was requested, apply splits.
+    if layout != "single" {
+        if let Some(ws_id_str) = resp
+            .result
+            .as_ref()
+            .and_then(|r| r.get("workspace_id"))
+            .and_then(|v| v.as_str())
+        {
+            if let Ok(ws_id) = uuid::Uuid::parse_str(ws_id_str) {
+                apply_workspace_layout(ws_id, &layout, state);
+            }
+        }
+    }
+
+    resp
+}
+
+/// Apply a named layout to a workspace that was just created.
+fn apply_workspace_layout(ws_id: uuid::Uuid, layout: &str, state: &Arc<SharedState>) {
+    use crate::model::panel::SplitOrientation;
+    use crate::model::PanelType;
+
+    match layout {
+        "horizontal-2" => {
+            let mut tm = lock_or_recover(&state.tab_manager);
+            if let Some(ws) = tm.workspace_mut(ws_id) {
+                ws.split(SplitOrientation::Horizontal, PanelType::Terminal);
+            }
+            drop(tm);
+            state.notify_ui_refresh();
+        }
+        "vertical-2" => {
+            let mut tm = lock_or_recover(&state.tab_manager);
+            if let Some(ws) = tm.workspace_mut(ws_id) {
+                ws.split(SplitOrientation::Vertical, PanelType::Terminal);
+            }
+            drop(tm);
+            state.notify_ui_refresh();
+        }
+        "grid-4" => {
+            // Build a 2×2 grid: split horizontal to get top/bottom, then split
+            // each half vertically to get four panels.
+            {
+                let mut tm = lock_or_recover(&state.tab_manager);
+                if let Some(ws) = tm.workspace_mut(ws_id) {
+                    // First horizontal split → top and bottom rows
+                    ws.split(SplitOrientation::Horizontal, PanelType::Terminal);
+                    // Second horizontal split on the first panel → creates top-right
+                    // (focus was moved by the first split; split again for row 2)
+                }
+            }
+            // Now split each row vertically to produce the 2×2 grid.
+            // We have [panel_a, panel_b] after two horizontal splits; we need
+            // to visit each and split vertically.
+            {
+                let panel_ids: Vec<uuid::Uuid> = {
+                    let tm = lock_or_recover(&state.tab_manager);
+                    tm.workspace(ws_id)
+                        .map(|ws| ws.panel_ids().to_vec())
+                        .unwrap_or_default()
+                };
+                // Focus each panel in turn and split it vertically.
+                for pid in panel_ids {
+                    let mut tm = lock_or_recover(&state.tab_manager);
+                    if let Some(ws) = tm.workspace_mut(ws_id) {
+                        ws.focus_panel(pid);
+                        ws.split(SplitOrientation::Vertical, PanelType::Terminal);
+                    }
+                }
+            }
+            state.notify_ui_refresh();
+        }
+        _ => {
+            tracing::warn!("workspace.create: unknown layout '{layout}', using 'single'");
+        }
+    }
 }
 
 pub(super) fn create_workspace(

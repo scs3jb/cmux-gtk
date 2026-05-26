@@ -132,6 +132,9 @@ pub enum WorkspaceCommands {
         /// Workspace title
         #[arg(long)]
         title: Option<String>,
+        /// Initial panel layout: single (default), horizontal-2, vertical-2, grid-4
+        #[arg(long, default_value = "single")]
+        layout: String,
     },
     /// Select a workspace by index (0-based)
     Select {
@@ -583,6 +586,12 @@ pub enum PaneCommands {
         /// Target workspace UUID
         #[arg(long)]
         workspace: Option<String>,
+    },
+    /// Split the focused pane without changing focus (focus stays on the active panel)
+    SplitOff {
+        /// Split orientation: horizontal or vertical
+        #[arg(long, default_value = "horizontal")]
+        direction: String,
     },
     /// List surfaces (panels) in the pane containing a panel
     Surfaces {

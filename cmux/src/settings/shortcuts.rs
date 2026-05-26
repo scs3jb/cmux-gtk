@@ -83,6 +83,12 @@ impl Default for ShortcutConfig {
             Some(Keybinding::ctrl_shift("Page_Down")),
         );
 
+        // Tab close — Ctrl+W (lowercase) closes the focused panel (browser convention).
+        // Ctrl+Shift+W is already workspace.close; lowercase w is available.
+        bindings.insert("close.tab".into(), Some(Keybinding::ctrl("w")));
+        // Close other panels in the same pane — unbound by default.
+        bindings.insert("close.tab.others".into(), None);
+
         // Pane management
         bindings.insert("pane.close".into(), Some(Keybinding::ctrl_shift("Q")));
         bindings.insert(
@@ -225,6 +231,10 @@ impl Default for ShortcutConfig {
 
         // Reload ghostty configuration
         bindings.insert("config.reload".into(), Some(Keybinding::ctrl_shift("comma")));
+
+        // Find in directory — focuses the file-explorer search entry.
+        // Unbound by default; users configure this in shortcuts.json.
+        bindings.insert("find.in_directory".into(), None);
 
         // Notification shortcuts — no default key; users bind these manually.
         bindings.insert("notification.defer_unread".into(), None);

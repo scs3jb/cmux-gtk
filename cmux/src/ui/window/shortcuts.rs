@@ -51,13 +51,16 @@ pub(super) fn setup_shortcuts(
         let shift = modifier.contains(gdk4::ModifierType::SHIFT_MASK);
         let alt = modifier.contains(gdk4::ModifierType::ALT_MASK);
 
-        // Check user-configurable notification shortcuts (no default bindings).
+        // Check user-configurable shortcuts (notification, tab, find-in-directory).
         {
             let shortcuts = crate::settings::shortcuts::load();
             let key_name = keyval.name().map(|n| n.to_string()).unwrap_or_default();
             let configurable_actions = [
                 "notification.defer_unread",
                 "notification.toggle_unread",
+                "close.tab",
+                "close.tab.others",
+                "find.in_directory",
             ];
             for action in &configurable_actions {
                 if let Some(binding) = shortcuts.get(action) {
@@ -76,6 +79,62 @@ pub(super) fn setup_shortcuts(
                                 state
                                     .shared
                                     .send_ui_event(crate::app::UiEvent::ToggleUnread);
+                            }
+                            // Close the focused panel (browser-style Ctrl+W).
+                            "close.tab" => {
+                                let closed = {
+                                    let mut tm = lock_or_recover(&state.shared.tab_manager);
+                                    if let Some(ws) = tm.selected_mut() {
+                                        if let Some(panel_id) = ws.focused_panel_id {
+                                            ws.remove_panel(panel_id)
+                                        } else {
+                                            false
+                                        }
+                                    } else {
+                                        false
+                                    }
+                                };
+                                if closed {
+                                    super::refresh_ui(&list_box, &content_box, &state);
+                                }
+                            }
+                            // Close all other panels in the same pane, keeping focus.
+                            "close.tab.others" => {
+                                let closed = {
+                                    let mut tm = lock_or_recover(&state.shared.tab_manager);
+                                    if let Some(ws) = tm.selected_mut() {
+                                        if let Some(panel_id) = ws.focused_panel_id {
+                                            let pane_ids =
+                                                ws.layout.find_pane_with_panel_readonly(panel_id);
+                                            if let Some(pane_ids) = pane_ids {
+                                                let to_close: Vec<uuid::Uuid> = pane_ids
+                                                    .iter()
+                                                    .filter(|&&pid| pid != panel_id)
+                                                    .copied()
+                                                    .collect();
+                                                for pid in &to_close {
+                                                    ws.panels.remove(pid);
+                                                    ws.layout.remove_panel(*pid);
+                                                }
+                                                !to_close.is_empty()
+                                            } else {
+                                                false
+                                            }
+                                        } else {
+                                            false
+                                        }
+                                    } else {
+                                        false
+                                    }
+                                };
+                                if closed {
+                                    super::refresh_ui(&list_box, &content_box, &state);
+                                }
+                            }
+                            // find.in_directory: focus the sidebar file-explorer search entry.
+                            // TODO: wire when a file-explorer search entry is added to the sidebar.
+                            "find.in_directory" => {
+                                tracing::debug!("find.in_directory — file explorer search not yet wired");
                             }
                             _ => {}
                         }
