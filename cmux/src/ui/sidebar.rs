@@ -88,9 +88,7 @@ pub fn create_sidebar(state: &Rc<AppState>) -> SidebarWidgets {
         });
     }
 
-    tracing::info!("sidebar: calling refresh_sidebar");
     refresh_sidebar(&list_box, state);
-    tracing::info!("sidebar: refresh_sidebar done");
 
     // Double-click on empty sidebar space creates a new workspace
     let dbl_click = gtk4::GestureClick::new();
@@ -301,7 +299,6 @@ fn create_workspace_row(
     sidebar: &SidebarDisplaySettings,
     state: &Rc<AppState>,
 ) -> gtk4::ListBoxRow {
-    eprintln!("create_workspace_row start idx={index}");
     let row = gtk4::ListBoxRow::new();
 
     // Workspace color indicator: colored left border when custom_color is set.
@@ -1217,14 +1214,11 @@ fn setup_row_context_menu(
 
     // Move focused pane to an existing workspace
     {
-        let other_workspace_ids: Vec<uuid::Uuid> = {
-            let tm = lock_or_recover(&state.shared.tab_manager);
-            tm.iter()
-                .enumerate()
-                .filter(|(i, _)| *i != index)
-                .map(|(_, ws)| ws.id)
-                .collect()
-        };
+        let other_workspace_ids: Vec<uuid::Uuid> = all_workspaces
+            .iter()
+            .filter(|(i, _, _)| *i != index)
+            .map(|(_, id, _)| *id)
+            .collect();
         for target_wid in other_workspace_ids {
             let action_name = format!("move-pane-to.{index}.{target_wid}");
             let move_pane_action = gtk4::gio::SimpleAction::new(&action_name, None);
