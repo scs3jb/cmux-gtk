@@ -605,8 +605,7 @@ fn activate(app: &adw::Application, state: &Rc<AppState>) {
 
     // Open windows — either restored or a fresh default
     if restored_window_ids.is_empty() {
-        let window_id = Uuid::new_v4();
-        open_window(app, state, window_id);
+        open_window(app, state, Uuid::new_v4());
     } else {
         for window_id in restored_window_ids {
             open_window(app, state, window_id);

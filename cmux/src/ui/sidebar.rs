@@ -88,7 +88,9 @@ pub fn create_sidebar(state: &Rc<AppState>) -> SidebarWidgets {
         });
     }
 
+    tracing::info!("sidebar: calling refresh_sidebar");
     refresh_sidebar(&list_box, state);
+    tracing::info!("sidebar: refresh_sidebar done");
 
     // Double-click on empty sidebar space creates a new workspace
     let dbl_click = gtk4::GestureClick::new();
@@ -204,10 +206,21 @@ pub fn refresh_sidebar(list_box: &gtk4::ListBox, state: &Rc<AppState>) {
     // release the lock before calling list_box.select_row.  select_row emits
     // `row-selected` synchronously; the connected handler tries to acquire
     // the same tab_manager lock, which would deadlock on std::sync::Mutex.
+    //
+    // We also pre-collect all workspace identifiers needed by the context menu
+    // so that setup_row_context_menu does not re-acquire tab_manager while the
+    // lock is already held (std::sync::Mutex is not re-entrant).
     let sidebar_settings = crate::settings::load().sidebar;
     let (rows, selected_index): (Vec<gtk4::ListBoxRow>, Option<usize>) = {
         let tab_manager = lock_or_recover(&state.shared.tab_manager);
         let selected_index = tab_manager.selected_index();
+        // Pre-collect (index, id, title) so setup_row_context_menu can build the
+        // "Move Focused Pane → …" submenu without re-locking tab_manager.
+        let all_workspaces: Vec<(usize, uuid::Uuid, String)> = tab_manager
+            .iter()
+            .enumerate()
+            .map(|(i, ws)| (i, ws.id, ws.display_title().to_string()))
+            .collect();
         let rows = tab_manager
             .iter()
             .enumerate()
@@ -220,6 +233,7 @@ pub fn refresh_sidebar(list_box: &gtk4::ListBox, state: &Rc<AppState>) {
                     workspace.window_id,
                     workspace.id,
                     workspace.remote_config.is_some(),
+                    &all_workspaces,
                     state,
                 );
                 setup_row_close_button(&row, index, state);
@@ -287,6 +301,7 @@ fn create_workspace_row(
     sidebar: &SidebarDisplaySettings,
     state: &Rc<AppState>,
 ) -> gtk4::ListBoxRow {
+    eprintln!("create_workspace_row start idx={index}");
     let row = gtk4::ListBoxRow::new();
 
     // Workspace color indicator: colored left border when custom_color is set.
@@ -848,6 +863,7 @@ fn setup_row_context_menu(
     window_id: Option<uuid::Uuid>,
     workspace_id: uuid::Uuid,
     has_remote: bool,
+    all_workspaces: &[(usize, uuid::Uuid, String)],
     state: &Rc<AppState>,
 ) {
     let menu = gtk4::gio::Menu::new();
@@ -916,15 +932,12 @@ fn setup_row_context_menu(
             Some(&format!("sidebar.move-pane-new.{index}")),
         );
 
-        // Collect other workspaces for the flat list
-        let other_workspaces: Vec<(uuid::Uuid, String)> = {
-            let tm = lock_or_recover(&state.shared.tab_manager);
-            tm.iter()
-                .enumerate()
-                .filter(|(i, _)| *i != index)
-                .map(|(i, ws)| (ws.id, format!("Move to: {} ({})", ws.display_title(), i + 1)))
-                .collect()
-        };
+        // Collect other workspaces for the flat list (pre-collected by caller to avoid re-locking)
+        let other_workspaces: Vec<(uuid::Uuid, String)> = all_workspaces
+            .iter()
+            .filter(|(i, _, _)| *i != index)
+            .map(|(i, id, title)| (*id, format!("Move to: {} ({})", title, i + 1)))
+            .collect();
         for (wid, label) in &other_workspaces {
             move_pane_menu.append(
                 Some(label),
