@@ -144,6 +144,17 @@ pub(crate) fn stop_all_webviews() {
     });
 }
 
+/// Apply browser theme injection JS to all registered WebViews.
+/// Called when the user changes the browser theme so every open panel updates.
+pub(crate) fn broadcast_browser_theme(theme: crate::settings::BrowserThemeMode) {
+    let js = theme.theme_injection_js();
+    WEBVIEW_REGISTRY.with(|r| {
+        for wv in r.borrow().values() {
+            wv.evaluate_javascript(js, None, None, gio::Cancellable::NONE, |_| {});
+        }
+    });
+}
+
 /// Collect current zoom levels for all browser panels (for session snapshots).
 pub(crate) fn collect_webview_zoom_levels() -> HashMap<uuid::Uuid, f64> {
     WEBVIEW_REGISTRY.with(|r| {

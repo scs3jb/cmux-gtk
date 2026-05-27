@@ -425,6 +425,34 @@ pub(super) fn install_css() {
             gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
     }
+
+    // Channel-build accent override: CMUX_CHANNEL=insiders → amber tint,
+    // CMUX_CHANNEL=nightly → purple tint, so testers can tell builds apart.
+    let channel = std::env::var("CMUX_CHANNEL")
+        .unwrap_or_default()
+        .to_lowercase();
+    let channel_css = match channel.as_str() {
+        "insiders" => Some(
+            "@define-color accent_bg_color #e6a817;
+             @define-color accent_color #c48b00;",
+        ),
+        "nightly" => Some(
+            "@define-color accent_bg_color #9141ac;
+             @define-color accent_color #7b35a0;",
+        ),
+        _ => None,
+    };
+    if let Some(css) = channel_css {
+        let channel_provider = gtk4::CssProvider::new();
+        channel_provider.load_from_data(css);
+        if let Some(display) = gtk4::gdk::Display::default() {
+            gtk4::style_context_add_provider_for_display(
+                &display,
+                &channel_provider,
+                gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION + 1,
+            );
+        }
+    }
 }
 
 /// Detect git branch and dirty state from a directory path.

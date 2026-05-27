@@ -1296,7 +1296,7 @@ pub fn create_browser_widget_with_profile(
         });
     }
 
-    // Keyboard shortcuts: Ctrl+=/Ctrl+-/Ctrl+0 for zoom
+    // Keyboard shortcuts: Ctrl+=/Ctrl+-/Ctrl+0 for zoom; Ctrl+Up/Down for page top/bottom
     {
         let wv = web_view.clone();
         let label = zoom_label.clone();
@@ -1324,6 +1324,28 @@ pub fn create_browser_widget_with_profile(
                     update_zoom_label(&wv, &label);
                     glib::Propagation::Stop
                 }
+                // Ctrl+Up → scroll to top of page (Linux equivalent of macOS Cmd+Up)
+                gdk4::Key::Up => {
+                    wv.evaluate_javascript(
+                        "window.scrollTo({top:0,behavior:'smooth'})",
+                        None,
+                        None,
+                        gio::Cancellable::NONE,
+                        |_| {},
+                    );
+                    glib::Propagation::Stop
+                }
+                // Ctrl+Down → scroll to bottom of page (Linux equivalent of macOS Cmd+Down)
+                gdk4::Key::Down => {
+                    wv.evaluate_javascript(
+                        "window.scrollTo({top:document.documentElement.scrollHeight,behavior:'smooth'})",
+                        None,
+                        None,
+                        gio::Cancellable::NONE,
+                        |_| {},
+                    );
+                    glib::Propagation::Stop
+                }
                 _ => glib::Propagation::Proceed,
             }
         });
@@ -1349,7 +1371,6 @@ pub fn create_browser_widget_with_profile(
 
     // -- Browser theme toggle handler --
     {
-        let wv = web_view.clone();
         let btn = theme_btn.clone();
         theme_btn.connect_clicked(move |_| {
             // Cycle: System -> Light -> Dark -> System
@@ -1371,9 +1392,8 @@ pub fn create_browser_widget_with_profile(
             };
             btn.set_icon_name(icon);
             btn.set_tooltip_text(Some(&format!("Browser Theme: {}", next.label())));
-            // Apply to current page
-            let js = next.theme_injection_js();
-            wv.evaluate_javascript(js, None, None, gio::Cancellable::NONE, |_| {});
+            // Apply to ALL open browser panels so theme change takes effect everywhere
+            registry::broadcast_browser_theme(next);
         });
     }
 

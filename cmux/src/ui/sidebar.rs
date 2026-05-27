@@ -853,6 +853,7 @@ fn create_workspace_row(
 }
 
 /// Set up right-click context menu on a sidebar row.
+#[allow(clippy::too_many_arguments)]
 fn setup_row_context_menu(
     row: &gtk4::ListBoxRow,
     index: usize,
