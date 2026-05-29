@@ -37,6 +37,10 @@ pub struct AppSettings {
     pub remote_ssh_enabled: bool,
     /// Hide the titlebar (header bar) for a distraction-free terminal.
     pub minimal_mode: bool,
+    /// Show the close (X) button on each tab. When false, tabs can only be
+    /// closed via middle-click or the right-click context menu, preventing
+    /// accidental closes.
+    pub show_tab_close_button: bool,
     /// Persist terminal scrollback in session.json (default: true).
     /// Disable if terminal output may contain sensitive data (passwords, tokens).
     pub persist_scrollback: bool,
@@ -741,6 +745,7 @@ impl Default for AppSettings {
             link_routing: LinkRoutingSettings::default(),
             remote_ssh_enabled: false,
             minimal_mode: false,
+            show_tab_close_button: true,
             persist_scrollback: true,
             warn_before_closing_tab: true,
             copy_on_select: false,

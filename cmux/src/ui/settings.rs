@@ -148,6 +148,13 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
     confirm_quit_row.set_active(current_settings.confirm_quit);
     behavior_group.add(&confirm_quit_row);
 
+    let show_tab_close_row = adw::SwitchRow::new();
+    show_tab_close_row.set_title("Show Tab Close Button");
+    show_tab_close_row
+        .set_subtitle("Show the X on tabs; when off, close via middle-click or right-click menu");
+    show_tab_close_row.set_active(current_settings.show_tab_close_button);
+    behavior_group.add(&show_tab_close_row);
+
     let placement_row = adw::ComboRow::new();
     placement_row.set_title("New Workspace Placement");
     placement_row.set_subtitle("Where to insert newly created workspaces");
@@ -304,6 +311,27 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
     tint_opacity_row.set_title("Tint Opacity");
     tint_opacity_row.set_subtitle("Opacity of the sidebar tint color (0.0–1.0)");
     sidebar_group.add(&tint_opacity_row);
+
+    let width_value = if current_settings.sidebar.width > 0 {
+        current_settings.sidebar.width as f64
+    } else {
+        280.0
+    };
+    let width_row = adw::SpinRow::new(
+        Some(&gtk4::Adjustment::new(
+            width_value,
+            150.0,
+            600.0,
+            10.0,
+            10.0,
+            0.0,
+        )),
+        10.0,
+        0,
+    );
+    width_row.set_title("Sidebar Width");
+    width_row.set_subtitle("Width of the workspace sidebar in pixels (applies on next window open)");
+    sidebar_group.add(&width_row);
 
     let match_terminal_bg_row = adw::SwitchRow::new();
     match_terminal_bg_row.set_title("Match Terminal Background");
@@ -1034,7 +1062,7 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
                     branch_vertical_layout: branch_layout_row.is_active(),
                     show_notification_message: notif_msg_row.is_active(),
                     focus_style: SidebarFocusStyle::from_index(focus_style_row.selected()),
-                    width: current_settings.sidebar.width,
+                    width: width_row.value() as u32,
                     tint_color: current_settings.sidebar.tint_color.clone(),
                     tint_color_light: current_settings.sidebar.tint_color_light.clone(),
                     tint_color_dark: current_settings.sidebar.tint_color_dark.clone(),
@@ -1087,6 +1115,7 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
                 imessage_mode: current_settings.imessage_mode,
                 shortcuts: shortcuts_state.borrow().clone(),
                 minimal_mode: current_settings.minimal_mode,
+                show_tab_close_button: show_tab_close_row.is_active(),
             };
 
             if let Err(e) = settings::save(&new_settings) {

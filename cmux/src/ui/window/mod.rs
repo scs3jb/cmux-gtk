@@ -51,8 +51,10 @@ pub fn create_window(
     } else {
         280.0
     };
-    split_view.set_min_sidebar_width(180.0);
-    split_view.set_max_sidebar_width(sidebar_width.max(280.0));
+    // Honor the configured width as the actual maximum so it doesn't get forced
+    // wider on low-resolution screens. Let it shrink below that on narrow windows.
+    split_view.set_min_sidebar_width(sidebar_width.min(180.0));
+    split_view.set_max_sidebar_width(sidebar_width);
     split_view.set_vexpand(true);
     split_view.set_hexpand(true);
 

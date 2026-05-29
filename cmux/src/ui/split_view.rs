@@ -327,32 +327,56 @@ fn build_tab_button(
     label.set_max_width_chars(20);
     tab.append(&label);
 
-    // Close button
-    let close_btn = gtk4::Button::from_icon_name("window-close-symbolic");
-    close_btn.add_css_class("flat");
-    close_btn.add_css_class("circular");
-    close_btn.add_css_class("pane-tab-close");
-    close_btn.set_tooltip_text(Some("Close tab"));
-    {
-        let state = Rc::clone(state);
-        close_btn.connect_clicked(move |_| {
-            let mut tm = lock_or_recover(&state.shared.tab_manager);
-            if let Some(ws) = tm.find_workspace_with_panel_mut(panel_id) {
-                ws.remove_panel(panel_id);
-                // Keep workspace alive even when empty
-            }
-            drop(tm);
-            state.shared.notify_ui_refresh();
-        });
-    }
-    tab.append(&close_btn);
+    // Close button — optional, controlled by the show_tab_close_button setting.
+    // When hidden, tabs can still be closed via middle-click or context menu.
+    let show_close_button = crate::settings::load().show_tab_close_button;
+    let close_btn = if show_close_button {
+        let close_btn = gtk4::Button::from_icon_name("window-close-symbolic");
+        close_btn.add_css_class("flat");
+        close_btn.add_css_class("circular");
+        close_btn.add_css_class("pane-tab-close");
+        close_btn.set_tooltip_text(Some("Close tab"));
+        {
+            let state = Rc::clone(state);
+            close_btn.connect_clicked(move |_| {
+                let mut tm = lock_or_recover(&state.shared.tab_manager);
+                if let Some(ws) = tm.find_workspace_with_panel_mut(panel_id) {
+                    ws.remove_panel(panel_id);
+                    // Keep workspace alive even when empty
+                }
+                drop(tm);
+                state.shared.notify_ui_refresh();
+            });
+        }
+        tab.append(&close_btn);
+        Some(close_btn)
+    } else {
+        None
+    };
 
     // Context menu — created once, kept alive with the tab
     let ctx_menu = gio::Menu::new();
     ctx_menu.append(Some("Rename"), Some("tab.rename"));
     ctx_menu.append(Some("Close"), Some("tab.close"));
+    ctx_menu.append(Some("Show Close Buttons"), Some("tab.toggle_close_btn"));
 
     let action_group = gio::SimpleActionGroup::new();
+
+    // Stateful toggle mirrors the global show_tab_close_button setting; renders
+    // as a checkmark item and rebuilds the tabs so the change is visible.
+    let toggle_close_action =
+        gio::SimpleAction::new_stateful("toggle_close_btn", None, &show_close_button.to_variant());
+    {
+        let state = Rc::clone(state);
+        toggle_close_action.connect_activate(move |action, _| {
+            let mut settings = crate::settings::load();
+            settings.show_tab_close_button = !settings.show_tab_close_button;
+            let _ = crate::settings::save(&settings);
+            action.set_state(&settings.show_tab_close_button.to_variant());
+            state.shared.notify_ui_refresh();
+        });
+    }
+    action_group.add_action(&toggle_close_action);
 
     let rename_action = gio::SimpleAction::new("rename", None);
     {
@@ -421,7 +445,10 @@ fn build_tab_button(
     }
     tab.add_controller(middle_click);
 
-    // Click to select tab — skip if the click lands on the close button
+    // Click to select tab — skip if the click lands on the close button.
+    // Selection runs on `pressed` but the sequence is left unclaimed so the
+    // DragSource below can still recognize a drag-to-reorder. (Claiming the
+    // press here would cancel the drag gesture before it could start.)
     let click = gtk4::GestureClick::new();
     click.set_button(1);
     {
@@ -435,11 +462,13 @@ fn build_tab_button(
                 return;
             };
             let tab_width = tab_widget.width() as f64;
-            let close_width = close_btn_ref.width() as f64;
+            let close_width = close_btn_ref
+                .as_ref()
+                .map(|b| b.width() as f64)
+                .unwrap_or(0.0);
             if close_width > 0.0 && x >= tab_width - close_width {
                 return;
             }
-            gesture.set_state(gtk4::EventSequenceState::Claimed);
             stack.set_visible_child_name(&panel_id.to_string());
             // Update model
             let mut tm = lock_or_recover(&state.shared.tab_manager);
@@ -470,9 +499,10 @@ fn build_tab_button(
                 return;
             };
             // Avoid triggering zoom when clicking the close button area
-            // (close button is the last child; use rough rightmost 28px guard)
+            // (close button is the last child; use rough rightmost 28px guard).
+            // Skip the guard entirely when the close button is hidden.
             let tab_width = tab_widget.width() as f64;
-            if tab_width > 0.0 && x >= tab_width - 28.0 {
+            if show_close_button && tab_width > 0.0 && x >= tab_width - 28.0 {
                 return;
             }
             gesture.set_state(gtk4::EventSequenceState::Claimed);
