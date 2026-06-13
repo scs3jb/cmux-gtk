@@ -663,6 +663,30 @@ pub enum BrowserCommands {
         #[arg(long)]
         panel: String,
     },
+    /// Mute or unmute a browser panel's audio (toggles if --muted omitted)
+    Mute {
+        /// Panel UUID
+        #[arg(long)]
+        panel: String,
+        /// Explicit muted state; omit to toggle
+        #[arg(long)]
+        muted: Option<bool>,
+    },
+    /// Toggle distraction-free focus mode (hide browser chrome)
+    FocusMode {
+        /// Panel UUID
+        #[arg(long)]
+        panel: String,
+        /// Explicit enabled state; omit to toggle
+        #[arg(long)]
+        enabled: Option<bool>,
+    },
+    /// Grab a snapshot of the page's React component tree (best-effort)
+    ReactGrab {
+        /// Panel UUID
+        #[arg(long)]
+        panel: String,
+    },
 
     // Phase 2: DOM interaction
     /// Click an element

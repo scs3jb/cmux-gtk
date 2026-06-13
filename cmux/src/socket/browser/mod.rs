@@ -35,6 +35,10 @@ pub fn dispatch(
         "browser.forward" => navigation::handle_forward(id, params, state),
         "browser.reload" => navigation::handle_reload(id, params, state),
         "browser.set_zoom" => navigation::handle_set_zoom(id, params, state),
+        "browser.mute" => navigation::handle_mute(id, params, state),
+        "browser.focus_mode" => navigation::handle_focus_mode(id, params, state),
+        "browser.react_grab" => navigation::handle_react_grab(id, params, state),
+        "browser.react-grab" => navigation::handle_react_grab(id, params, state),
         "browser.screenshot" => navigation::handle_screenshot(id, params, state),
         // DOM interaction
         "browser.click" => interaction::handle_click(id, params, state),

@@ -233,6 +233,23 @@ fn main() -> anyhow::Result<()> {
             BrowserCommands::Screenshot { panel } => {
                 ("browser.screenshot", serde_json::json!({"panel": panel}))
             }
+            BrowserCommands::Mute { panel, muted } => {
+                let mut p = serde_json::json!({"panel": panel});
+                if let Some(m) = muted {
+                    p["muted"] = serde_json::json!(m);
+                }
+                ("browser.mute", p)
+            }
+            BrowserCommands::FocusMode { panel, enabled } => {
+                let mut p = serde_json::json!({"panel": panel});
+                if let Some(e) = enabled {
+                    p["enabled"] = serde_json::json!(e);
+                }
+                ("browser.focus_mode", p)
+            }
+            BrowserCommands::ReactGrab { panel } => {
+                ("browser.react_grab", serde_json::json!({"panel": panel}))
+            }
             BrowserCommands::Click {
                 panel,
                 selector,

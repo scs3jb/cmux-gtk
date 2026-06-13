@@ -43,7 +43,8 @@ cargo build --release --no-default-features --features cmux/link-ghostty
 - **OSC notifications** — OSC 9/777 triggers desktop notifications with pane attention ring
 - **Browser profiles** — per-profile isolated NetworkSession with persistent cookies
 - **Browser history** — frecency-scored history with omnibar autocomplete
-- **Browser navigation** — window.open/target=_blank → new tab, Ctrl+click/middle-click → new tab, deep link handling (custom URI schemes → xdg-open), insecure HTTP interstitial with allowlist
+- **Browser navigation** — window.open/target=_blank → new tab, Ctrl+click/middle-click → new tab, mouse back/forward side buttons (8/9), deep link handling (custom URI schemes → xdg-open), insecure HTTP interstitial with allowlist
+- **Browser tab controls** — per-tab audio mute, distraction-free focus mode (hide chrome, Esc to exit), React component grab (`browser.react_grab`)
 - **Browser theme mode** — separate System/Light/Dark override with toolbar toggle and settings
 - **Browser security** — user agent override (Safari-compatible), camera/mic/geo permission denial by default, context menu customization, input sanitization
 - **Link routing** — configurable URL patterns for system vs cmux browser, HTTP allowlist

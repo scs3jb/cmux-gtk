@@ -92,6 +92,43 @@ pub(super) fn handle_set_zoom(id: Value, params: &Value, state: &Arc<SharedState
     Response::success(id, serde_json::json!({"zoom": zoom}))
 }
 
+pub(super) fn handle_mute(id: Value, params: &Value, state: &Arc<SharedState>) -> Response {
+    // Optional `muted` bool; absent => toggle.
+    let muted = params.get("muted").and_then(|v| v.as_bool());
+    send_action_with_reply(
+        &id,
+        params,
+        state,
+        |reply| BrowserActionKind::SetMuted { muted, reply },
+        "not_found",
+        "UI event channel closed",
+    )
+}
+
+pub(super) fn handle_focus_mode(id: Value, params: &Value, state: &Arc<SharedState>) -> Response {
+    // Optional `enabled` bool; absent => toggle.
+    let enabled = params.get("enabled").and_then(|v| v.as_bool());
+    send_action_with_reply(
+        &id,
+        params,
+        state,
+        |reply| BrowserActionKind::SetFocusMode { enabled, reply },
+        "not_found",
+        "UI event channel closed",
+    )
+}
+
+pub(super) fn handle_react_grab(id: Value, params: &Value, state: &Arc<SharedState>) -> Response {
+    send_action_with_reply(
+        &id,
+        params,
+        state,
+        |reply| BrowserActionKind::ReactGrab { reply },
+        "not_found",
+        "UI event channel closed",
+    )
+}
+
 pub(super) fn handle_screenshot(id: Value, params: &Value, state: &Arc<SharedState>) -> Response {
     send_action_with_reply(
         &id,

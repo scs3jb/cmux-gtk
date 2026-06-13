@@ -272,11 +272,20 @@ pub fn create_browser_widget_with_profile(
     theme_btn.add_css_class("flat");
     nav_bar.append(&theme_btn);
 
+    let mute_btn = gtk4::ToggleButton::new();
+    mute_btn.set_icon_name("audio-volume-high-symbolic");
+    mute_btn.set_tooltip_text(Some("Mute Tab"));
+    mute_btn.add_css_class("flat");
+    nav_bar.append(&mute_btn);
+
     let devtools_btn = gtk4::ToggleButton::new();
     devtools_btn.set_icon_name("utilities-terminal-symbolic");
     devtools_btn.set_tooltip_text(Some("Developer Tools"));
     devtools_btn.add_css_class("flat");
     nav_bar.append(&devtools_btn);
+
+    // Register the chrome (nav bar) so focus mode can hide/show it.
+    registry::register_chrome(panel_id, &nav_bar);
 
     container.append(&nav_bar);
 
@@ -1111,6 +1120,47 @@ pub fn create_browser_widget_with_profile(
         });
     }
 
+    // -- Mute toggle --
+    {
+        let wv = web_view.clone();
+        mute_btn.connect_toggled(move |btn| {
+            let muted = btn.is_active();
+            wv.set_is_muted(muted);
+            btn.set_icon_name(if muted {
+                "audio-volume-muted-symbolic"
+            } else {
+                "audio-volume-high-symbolic"
+            });
+            btn.set_tooltip_text(Some(if muted { "Unmute Tab" } else { "Mute Tab" }));
+        });
+    }
+
+    // -- Mouse back/forward side buttons (8 = back, 9 = forward) --
+    {
+        let wv = web_view.clone();
+        let mouse_nav = gtk4::GestureClick::new();
+        // Button 0 listens for every button; we only act on the side buttons.
+        mouse_nav.set_button(0);
+        // Capture phase so we intercept before WebKit consumes the event.
+        mouse_nav.set_propagation_phase(gtk4::PropagationPhase::Capture);
+        mouse_nav.connect_pressed(move |gesture, _, _, _| match gesture.current_button() {
+            8 => {
+                gesture.set_state(gtk4::EventSequenceState::Claimed);
+                if wv.can_go_back() {
+                    wv.go_back();
+                }
+            }
+            9 => {
+                gesture.set_state(gtk4::EventSequenceState::Claimed);
+                if wv.can_go_forward() {
+                    wv.go_forward();
+                }
+            }
+            _ => {}
+        });
+        web_view.add_controller(mouse_nav);
+    }
+
     // -- URL entry navigation --
     {
         let wv = web_view.clone();
@@ -1300,9 +1350,15 @@ pub fn create_browser_widget_with_profile(
     {
         let wv = web_view.clone();
         let label = zoom_label.clone();
+        let focus_nav_bar = nav_bar.clone();
         let zoom_controller = gtk4::EventControllerKey::new();
         zoom_controller.connect_key_pressed(move |_, keyval, _, modifier| {
             let ctrl = modifier.contains(gdk4::ModifierType::CONTROL_MASK);
+            // Escape exits focus mode (restores hidden browser chrome).
+            if keyval == gdk4::Key::Escape && !focus_nav_bar.is_visible() {
+                focus_nav_bar.set_visible(true);
+                return glib::Propagation::Stop;
+            }
             if !ctrl {
                 return glib::Propagation::Proceed;
             }

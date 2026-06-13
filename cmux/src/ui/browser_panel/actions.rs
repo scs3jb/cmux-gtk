@@ -6,7 +6,9 @@ use std::rc::Rc;
 use serde_json::Value;
 use webkit6::prelude::*;
 
-use super::registry::{get_webview, DialogHandler, CONSOLE_BUFFERS, DIALOG_HANDLERS};
+use super::registry::{
+    get_webview, set_focus_mode, DialogHandler, CONSOLE_BUFFERS, DIALOG_HANDLERS,
+};
 use super::theme::apply_dark_mode;
 
 // ---------------------------------------------------------------------------
@@ -29,6 +31,14 @@ impl std::fmt::Debug for BrowserActionKind {
             Self::SetZoom { zoom } => f.debug_struct("SetZoom").field("zoom", zoom).finish(),
             Self::ZoomIn => write!(f, "ZoomIn"),
             Self::ZoomOut => write!(f, "ZoomOut"),
+            Self::SetMuted { muted, .. } => {
+                f.debug_struct("SetMuted").field("muted", muted).finish()
+            }
+            Self::SetFocusMode { enabled, .. } => f
+                .debug_struct("SetFocusMode")
+                .field("enabled", enabled)
+                .finish(),
+            Self::ReactGrab { .. } => write!(f, "ReactGrab"),
             Self::WaitForSelector { selector, .. } => f
                 .debug_struct("WaitForSelector")
                 .field("selector", selector)
@@ -74,6 +84,22 @@ pub enum BrowserActionKind {
     },
     ZoomIn,
     ZoomOut,
+    /// Mute/unmute the panel's audio. `muted: None` toggles. Replies with the
+    /// resulting muted state.
+    SetMuted {
+        muted: Option<bool>,
+        reply: tokio::sync::oneshot::Sender<Result<Value, String>>,
+    },
+    /// Toggle distraction-free focus mode (hide browser chrome). `enabled: None`
+    /// toggles. Replies with the resulting enabled state.
+    SetFocusMode {
+        enabled: Option<bool>,
+        reply: tokio::sync::oneshot::Sender<Result<Value, String>>,
+    },
+    /// Extract a snapshot of the page's React component tree (best-effort).
+    ReactGrab {
+        reply: tokio::sync::oneshot::Sender<Result<Value, String>>,
+    },
 
     // Phase 5: Wait commands
     WaitForSelector {
@@ -262,6 +288,80 @@ pub(crate) fn execute_action(panel_id: uuid::Uuid, action: BrowserActionKind) {
             if let Some(wv) = get_webview(panel_id) {
                 let new_zoom = (wv.zoom_level() - 0.1).max(0.25);
                 wv.set_zoom_level(new_zoom);
+            }
+        }
+        BrowserActionKind::SetMuted { muted, reply } => {
+            if let Some(wv) = get_webview(panel_id) {
+                let new_state = muted.unwrap_or_else(|| !wv.is_muted());
+                wv.set_is_muted(new_state);
+                let _ = reply.send(Ok(serde_json::json!({"muted": new_state})));
+            } else {
+                let _ = reply.send(Err("Browser panel not found".to_string()));
+            }
+        }
+        BrowserActionKind::SetFocusMode { enabled, reply } => {
+            match set_focus_mode(panel_id, enabled) {
+                Some(new_state) => {
+                    let _ = reply.send(Ok(serde_json::json!({"focus_mode": new_state})));
+                }
+                None => {
+                    let _ = reply.send(Err("Browser panel not found".to_string()));
+                }
+            }
+        }
+        BrowserActionKind::ReactGrab { reply } => {
+            if let Some(wv) = get_webview(panel_id) {
+                // Best-effort: walk the DOM for React fiber roots and collect
+                // the names of mounted components (bounded to 200 entries).
+                let js = r#"(function(){
+                    try {
+                        var out = [];
+                        var nodes = document.querySelectorAll('*');
+                        var seen = {};
+                        for (var i = 0; i < nodes.length && out.length < 200; i++) {
+                            var el = nodes[i];
+                            var key = Object.keys(el).find(function(k){
+                                return k.indexOf('__reactFiber$') === 0
+                                    || k.indexOf('__reactInternalInstance$') === 0;
+                            });
+                            if (!key) continue;
+                            var fiber = el[key];
+                            while (fiber) {
+                                var t = fiber.type;
+                                var name = null;
+                                if (typeof t === 'function') name = t.displayName || t.name;
+                                else if (t && typeof t === 'object') name = t.displayName || (t.render && (t.render.displayName || t.render.name));
+                                if (name && !seen[name]) { seen[name] = 1; out.push(name); }
+                                fiber = fiber.return;
+                            }
+                        }
+                        var hasReact = !!(window.React || document.querySelector('[data-reactroot]') || out.length);
+                        return JSON.stringify({ react: hasReact, components: out });
+                    } catch (e) {
+                        return JSON.stringify({ react: false, error: String(e), components: [] });
+                    }
+                })()"#;
+                wv.evaluate_javascript(
+                    js,
+                    None,
+                    None,
+                    None::<&gio::Cancellable>,
+                    move |result| {
+                        let resp = match result {
+                            Ok(val) => {
+                                let raw = val.to_str().to_string();
+                                match serde_json::from_str::<Value>(&raw) {
+                                    Ok(parsed) => Ok(parsed),
+                                    Err(_) => Ok(serde_json::json!({"raw": raw})),
+                                }
+                            }
+                            Err(e) => Err(e.to_string()),
+                        };
+                        let _ = reply.send(resp);
+                    },
+                );
+            } else {
+                let _ = reply.send(Err("Browser panel not found".to_string()));
             }
         }
         BrowserActionKind::WaitForSelector {

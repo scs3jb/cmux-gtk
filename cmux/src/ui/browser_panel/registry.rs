@@ -62,6 +62,9 @@ thread_local! {
 
     /// Per-panel find entry widget (to grab focus when opening find bar).
     pub(super) static FIND_ENTRIES: RefCell<HashMap<uuid::Uuid, gtk4::SearchEntry>> = RefCell::new(HashMap::new());
+
+    /// Per-panel browser chrome (nav bar) — hidden/shown by focus mode.
+    pub(super) static CHROME_BARS: RefCell<HashMap<uuid::Uuid, gtk4::Box>> = RefCell::new(HashMap::new());
 }
 
 // ---------------------------------------------------------------------------
@@ -132,6 +135,25 @@ pub(crate) fn get_webview(panel_id: uuid::Uuid) -> Option<webkit6::WebView> {
 #[allow(dead_code)]
 pub(crate) fn unregister_webview(panel_id: uuid::Uuid) {
     WEBVIEW_REGISTRY.with(|r| r.borrow_mut().remove(&panel_id));
+    CHROME_BARS.with(|r| r.borrow_mut().remove(&panel_id));
+}
+
+/// Register a panel's browser chrome (nav bar) for focus-mode toggling.
+pub(super) fn register_chrome(panel_id: uuid::Uuid, nav_bar: &gtk4::Box) {
+    CHROME_BARS.with(|r| r.borrow_mut().insert(panel_id, nav_bar.clone()));
+}
+
+/// Toggle (or set) distraction-free focus mode by hiding the browser chrome.
+/// Returns the resulting enabled state, or `None` if the panel is unknown.
+pub(super) fn set_focus_mode(panel_id: uuid::Uuid, enabled: Option<bool>) -> Option<bool> {
+    CHROME_BARS.with(|r| {
+        r.borrow().get(&panel_id).map(|nav_bar| {
+            let new_state = enabled.unwrap_or_else(|| nav_bar.is_visible());
+            // focus mode ON => chrome hidden
+            nav_bar.set_visible(!new_state);
+            new_state
+        })
+    })
 }
 
 /// Stop loading on all registered WebViews — call before shutdown to
