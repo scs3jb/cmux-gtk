@@ -177,6 +177,12 @@ pub fn show_ssh_dialog(window: &adw::ApplicationWindow, state: &Rc<AppState>) {
     identity_row.set_text("");
     group.add(&identity_row);
 
+    let agent_row = adw::SwitchRow::new();
+    agent_row.set_title("Forward SSH agent");
+    agent_row.set_subtitle("Forward the local SSH agent to the remote host (ssh -A)");
+    agent_row.set_active(false);
+    group.add(&agent_row);
+
     dialog.set_extra_child(Some(&group));
 
     dialog.add_response("cancel", "Cancel");
@@ -213,6 +219,7 @@ pub fn show_ssh_dialog(window: &adw::ApplicationWindow, state: &Rc<AppState>) {
             port,
             identity,
             ssh_options: Vec::new(),
+            agent_forward: agent_row.is_active(),
             remote_daemon_path: None,
         };
 

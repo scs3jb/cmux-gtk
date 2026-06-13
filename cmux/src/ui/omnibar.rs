@@ -291,6 +291,21 @@ pub fn build_omnibar_full(
         let popover = popover.clone();
         let ghost_label = ghost_label.clone();
         let focus_controller = gtk4::EventControllerFocus::new();
+        // Select the entire URL on the first focus-gaining click so the user can
+        // immediately overtype, matching browser address-bar behavior. Deferred to
+        // idle so it runs after the click positions the cursor; skipped if the user
+        // drag-selected a range.
+        {
+            let entry_for_focus = entry.clone();
+            focus_controller.connect_enter(move |_| {
+                let entry = entry_for_focus.clone();
+                glib::idle_add_local_once(move || {
+                    if entry.has_focus() && entry.selection_bounds().is_none() {
+                        entry.select_region(0, -1);
+                    }
+                });
+            });
+        }
         focus_controller.connect_leave(move |_| {
             let popover = popover.clone();
             let ghost_label = ghost_label.clone();

@@ -56,6 +56,18 @@ pub(super) fn handle_workspace_new(
     create_workspace(id, params, state, false)
 }
 
+/// Create a workspace whose initial panel is a browser surface.
+/// Accepts an optional `url` param to open immediately.
+pub(super) fn handle_workspace_new_browser(
+    id: Value,
+    params: &Value,
+    state: &Arc<SharedState>,
+) -> Response {
+    let mut p = params.clone();
+    p["browser"] = serde_json::json!(true);
+    create_workspace(id, &p, state, false)
+}
+
 pub(super) fn handle_workspace_create(
     id: Value,
     params: &Value,
@@ -186,6 +198,29 @@ pub(super) fn create_workspace(
         }
     }
 
+    // If a browser workspace is requested, convert the initial panel to a
+    // browser surface (optionally opening a URL). `kind: "browser"` or
+    // `browser: true` both work.
+    let want_browser = params
+        .get("browser")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+        || params.get("kind").and_then(|v| v.as_str()) == Some("browser");
+    if want_browser {
+        let url = params
+            .get("url")
+            .and_then(|v| v.as_str())
+            .map(|s| truncate_str(s, MAX_URL_LEN).to_string());
+        let pid = ws
+            .focused_panel_id
+            .or_else(|| ws.panels.keys().next().copied());
+        if let Some(panel) = pid.and_then(|pid| ws.panels.get_mut(&pid)) {
+            panel.panel_type = crate::model::PanelType::Browser;
+            panel.command = None;
+            panel.browser_url = url;
+        }
+    }
+
     let ws_id = ws.id;
     let mut tab_manager = lock_or_recover(&state.tab_manager);
     let previously_selected = if preserve_selection {
@@ -239,9 +274,16 @@ pub(crate) fn handle_workspace_create_ssh(
         .get("identity")
         .and_then(|v| v.as_str())
         .map(String::from);
+    let agent_forward = params
+        .get("agent_forward")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
     // Build SSH command (shell-escape user-supplied values to prevent injection)
     let mut ssh_cmd = "ssh".to_string();
+    if agent_forward {
+        ssh_cmd += " -A";
+    }
     if let Some(p) = port {
         ssh_cmd += &format!(" -p {}", p);
     }
@@ -256,6 +298,7 @@ pub(crate) fn handle_workspace_create_ssh(
         port,
         identity,
         ssh_options: Vec::new(),
+        agent_forward,
         remote_daemon_path: None,
     };
 

@@ -240,8 +240,18 @@ pub fn dispatch(line: &str, state: &Arc<SharedState>) -> String {
         }
         "ssh" => {
             let mut p = json!({});
-            if let Some(dest) = args.first() {
-                p["destination"] = json!(dest);
+            let mut agent_forward = false;
+            for a in args.iter() {
+                match a.as_str() {
+                    "-A" | "--forward-agent" => agent_forward = true,
+                    dest if !dest.starts_with('-') && p.get("destination").is_none() => {
+                        p["destination"] = json!(dest);
+                    }
+                    _ => {}
+                }
+            }
+            if agent_forward {
+                p["agent_forward"] = json!(true);
             }
             ("workspace.create_ssh", p)
         }

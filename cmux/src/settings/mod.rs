@@ -52,6 +52,8 @@ pub struct AppSettings {
     pub confirm_quit: bool,
     /// Font size for the workspace tab bar labels (0.0 = system default).
     pub tab_bar_font_size: f32,
+    /// Font size for the sidebar workspace list (0.0 = system default).
+    pub sidebar_font_size: f32,
     /// New workspaces inherit the cwd from the active terminal panel.
     pub workspace_cwd_inheritance: bool,
     /// What the + button in the tab bar does.
@@ -274,6 +276,11 @@ pub struct BrowserSettings {
     pub enabled: bool,
     /// Default search engine for non-URL queries.
     pub search_engine: SearchEngine,
+    /// Custom search URL template, used when `search_engine` is `Custom`.
+    /// The query is substituted for `%s` (or appended if no placeholder).
+    /// Example: `https://search.brave.com/search?q=%s`.
+    #[serde(default)]
+    pub custom_search_template: String,
     /// Home page URL (shown when clicking home button).
     pub home_url: String,
     /// Show remote search suggestions in the omnibar.
@@ -297,6 +304,7 @@ impl Default for BrowserSettings {
         Self {
             enabled: true,
             search_engine: SearchEngine::DuckDuckGo,
+            custom_search_template: String::new(),
             home_url: "https://duckduckgo.com".to_string(),
             search_suggestions: true,
             http_allowlist: Vec::new(),
@@ -398,6 +406,8 @@ pub enum SearchEngine {
     Bing,
     Kagi,
     Startpage,
+    /// User-defined provider; URL template stored in `BrowserSettings::custom_search_template`.
+    Custom,
 }
 
 impl SearchEngine {
@@ -410,6 +420,19 @@ impl SearchEngine {
             Self::Bing => format!("https://www.bing.com/search?q={encoded}"),
             Self::Kagi => format!("https://kagi.com/search?q={encoded}"),
             Self::Startpage => format!("https://www.startpage.com/do/search?q={encoded}"),
+            Self::Custom => {
+                // Read the configured template on demand so this method keeps its
+                // simple `(self, query)` signature used across the codebase.
+                let template = load().browser.custom_search_template;
+                if template.trim().is_empty() {
+                    // No template configured — fall back to DuckDuckGo.
+                    format!("https://duckduckgo.com/?q={encoded}")
+                } else if template.contains("%s") {
+                    template.replace("%s", &encoded)
+                } else {
+                    format!("{template}{encoded}")
+                }
+            }
         }
     }
 
@@ -419,6 +442,7 @@ impl SearchEngine {
         Self::Bing,
         Self::Kagi,
         Self::Startpage,
+        Self::Custom,
     ];
 
     pub fn label(self) -> &'static str {
@@ -428,6 +452,7 @@ impl SearchEngine {
             Self::Bing => "Bing",
             Self::Kagi => "Kagi",
             Self::Startpage => "Startpage",
+            Self::Custom => "Custom",
         }
     }
 
@@ -438,6 +463,7 @@ impl SearchEngine {
             2 => Self::Bing,
             3 => Self::Kagi,
             4 => Self::Startpage,
+            5 => Self::Custom,
             _ => Self::DuckDuckGo,
         }
     }
@@ -449,6 +475,7 @@ impl SearchEngine {
             Self::Bing => 2,
             Self::Kagi => 3,
             Self::Startpage => 4,
+            Self::Custom => 5,
         }
     }
 }
@@ -751,6 +778,7 @@ impl Default for AppSettings {
             copy_on_select: false,
             confirm_quit: true,
             tab_bar_font_size: 0.0,
+            sidebar_font_size: 0.0,
             workspace_cwd_inheritance: true,
             plus_button_action: PlusButtonAction::default(),
             split_ratio_persist: true,

@@ -28,7 +28,7 @@ cargo build --release --no-default-features --features cmux/link-ghostty
 
 - **Terminal multiplexer** — workspaces, split panes, tab management, directional focus
 - **Integrated browser** — WebKit6 panels with 120+ automation commands (Playwright-style API)
-- **Shell integration** — auto-injected via ZDOTDIR/BASH_ENV; CWD, git branch, PR polling, semantic prompts
+- **Shell integration** — auto-injected via ZDOTDIR/BASH_ENV/XDG_DATA_DIRS (zsh/bash/fish); CWD, git branch, PR polling, semantic prompts
 - **Remote SSH workspaces** — `cmux ssh user@host` with auto-bootstrap daemon, SOCKS5 proxy tunnel for browser traffic, CLI relay for remote cmux commands, sidebar connection indicators
 - **Session persistence** — scrollback, geometry, zoom, URLs, browser back/forward history restored on restart
 - **Socket API** — V1 text (60 commands) + V2 JSON-RPC protocol (210+ methods) for automation
@@ -78,7 +78,7 @@ cargo build --release --no-default-features --features cmux/link-ghostty
 - `cmux/bin/cmux` — CLI wrapper script (socket auto-discovery, ncat/socat/nc transport, claude-hook subcommand)
 - `cmux/bin/claude` — Claude Code wrapper (session hooks, status reporting)
 - `cmux/bin/xdg-open` — URL routing wrapper (HTTP(S) → cmux browser, fallback to system)
-- `cmux/shell-integration/` — Auto-injected zsh/bash integration scripts
+- `cmux/shell-integration/` — Auto-injected zsh/bash/fish integration scripts
 
 ## Architecture Review
 
@@ -90,6 +90,7 @@ It documents the Ghostty integration constraints and architectural decisions.
 cmux auto-injects shell integration via:
 - **Zsh**: ZDOTDIR override → `.zshenv` bootstrap → sources integration, restores user ZDOTDIR
 - **Bash**: BASH_ENV → sources integration script (PS0 preexec on Bash 4.4+)
+- **Fish**: XDG_DATA_DIRS prepend → fish auto-sources `fish/vendor_conf.d/cmux.fish` (deferred setup on first prompt; non-invasive, preserves existing XDG_DATA_DIRS)
 
 Features: CWD reporting, fast git HEAD resolution (no fork), async git branch detection (3s throttle, background subshell), async git HEAD watcher during commands, smart PR polling with `gh` CLI (45s interval, 20s timeout, transient failure resilience), port scanning, semantic prompt markers (OSC 133 with `redraw=last;cl=line`), scrollback restoration, prompt wrap guard (zsh), WINCH guard (zsh), PATH prepend for cmux CLI, recursive process tree cleanup on exit.
 

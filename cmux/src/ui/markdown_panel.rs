@@ -54,6 +54,22 @@ pub fn create_markdown_widget(
     spacer.set_hexpand(true);
     toolbar.append(&spacer);
 
+    // Zoom controls
+    let zoom_out_btn = gtk4::Button::from_icon_name("zoom-out-symbolic");
+    zoom_out_btn.add_css_class("flat");
+    zoom_out_btn.set_tooltip_text(Some("Zoom Out (Ctrl+-)"));
+    toolbar.append(&zoom_out_btn);
+
+    let zoom_reset_btn = gtk4::Button::from_icon_name("zoom-original-symbolic");
+    zoom_reset_btn.add_css_class("flat");
+    zoom_reset_btn.set_tooltip_text(Some("Reset Zoom (Ctrl+0)"));
+    toolbar.append(&zoom_reset_btn);
+
+    let zoom_in_btn = gtk4::Button::from_icon_name("zoom-in-symbolic");
+    zoom_in_btn.add_css_class("flat");
+    zoom_in_btn.set_tooltip_text(Some("Zoom In (Ctrl++)"));
+    toolbar.append(&zoom_in_btn);
+
     // Reload button
     let reload_btn = gtk4::Button::from_icon_name("view-refresh-symbolic");
     reload_btn.add_css_class("flat");
@@ -131,6 +147,59 @@ pub fn create_markdown_widget(
                 load_markdown_file(&wv, p);
             }
         });
+    }
+
+    // Zoom controls — WebKit WebView supports continuous zoom levels.
+    const ZOOM_STEP: f64 = 0.1;
+    const ZOOM_MIN: f64 = 0.3;
+    const ZOOM_MAX: f64 = 5.0;
+    {
+        let wv = web_view.clone();
+        zoom_in_btn.connect_clicked(move |_| {
+            let z = (wv.zoom_level() + ZOOM_STEP).min(ZOOM_MAX);
+            wv.set_zoom_level(z);
+        });
+    }
+    {
+        let wv = web_view.clone();
+        zoom_out_btn.connect_clicked(move |_| {
+            let z = (wv.zoom_level() - ZOOM_STEP).max(ZOOM_MIN);
+            wv.set_zoom_level(z);
+        });
+    }
+    {
+        let wv = web_view.clone();
+        zoom_reset_btn.connect_clicked(move |_| {
+            wv.set_zoom_level(1.0);
+        });
+    }
+    // Ctrl +/-/0 keyboard zoom on the panel.
+    {
+        let wv = web_view.clone();
+        let key_controller = gtk4::EventControllerKey::new();
+        key_controller.connect_key_pressed(move |_, keyval, _, modifier| {
+            if !modifier.contains(gdk4::ModifierType::CONTROL_MASK) {
+                return glib::Propagation::Proceed;
+            }
+            match keyval {
+                gdk4::Key::plus | gdk4::Key::equal | gdk4::Key::KP_Add => {
+                    let z = (wv.zoom_level() + ZOOM_STEP).min(ZOOM_MAX);
+                    wv.set_zoom_level(z);
+                    glib::Propagation::Stop
+                }
+                gdk4::Key::minus | gdk4::Key::KP_Subtract => {
+                    let z = (wv.zoom_level() - ZOOM_STEP).max(ZOOM_MIN);
+                    wv.set_zoom_level(z);
+                    glib::Propagation::Stop
+                }
+                gdk4::Key::_0 | gdk4::Key::KP_0 => {
+                    wv.set_zoom_level(1.0);
+                    glib::Propagation::Stop
+                }
+                _ => glib::Propagation::Proceed,
+            }
+        });
+        web_view.add_controller(key_controller);
     }
 
     // File watcher — native inotify via gio::FileMonitor

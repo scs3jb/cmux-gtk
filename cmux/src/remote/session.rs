@@ -20,6 +20,9 @@ pub struct RemoteConfig {
     pub identity: Option<String>,
     #[serde(default)]
     pub ssh_options: Vec<String>,
+    /// Forward the local SSH agent to the remote host (ssh -A).
+    #[serde(default)]
+    pub agent_forward: bool,
     /// Path to the daemon binary on the remote host.
     #[serde(default)]
     pub remote_daemon_path: Option<String>,
@@ -39,6 +42,9 @@ impl RemoteConfig {
         }
 
         let mut args = Vec::new();
+        if self.agent_forward {
+            args.push("-A".to_string());
+        }
         if let Some(port) = self.port {
             args.push("-p".to_string());
             args.push(port.to_string());
@@ -246,6 +252,7 @@ mod tests {
             port: None,
             identity: None,
             ssh_options: Vec::new(),
+            agent_forward: false,
             remote_daemon_path: None,
         }
     }
@@ -263,6 +270,7 @@ mod tests {
             port: Some(2222),
             identity: Some("/path/to/key".to_string()),
             ssh_options: Vec::new(),
+            agent_forward: false,
             remote_daemon_path: None,
         };
         assert_eq!(
@@ -278,6 +286,7 @@ mod tests {
             port: None,
             identity: None,
             ssh_options: vec!["-o ProxyCommand=evil".to_string(), "--flag".to_string()],
+            agent_forward: false,
             remote_daemon_path: None,
         };
         // Both options start with '-', so neither passes through
@@ -292,6 +301,7 @@ mod tests {
             port: None,
             identity: None,
             ssh_options: Vec::new(),
+            agent_forward: false,
             remote_daemon_path: None,
         };
         // Destination starting with '-' returns empty args
@@ -305,6 +315,7 @@ mod tests {
             port: None,
             identity: Some("-evil".to_string()),
             ssh_options: Vec::new(),
+            agent_forward: false,
             remote_daemon_path: None,
         };
         // Identity starting with '-' is dropped; destination still present
@@ -321,6 +332,7 @@ mod tests {
                 "StrictHostKeyChecking=no".to_string(),
                 "ServerAliveInterval=30".to_string(),
             ],
+            agent_forward: false,
             remote_daemon_path: None,
         };
         let args = c.ssh_args();
@@ -343,6 +355,7 @@ mod tests {
             port: None,
             identity: None,
             ssh_options: vec!["A".repeat(256)],
+            agent_forward: false,
             remote_daemon_path: None,
         };
         // Longer than 255 chars is rejected
@@ -361,6 +374,7 @@ mod tests {
             port: None,
             identity: None,
             ssh_options: Vec::new(),
+            agent_forward: false,
             remote_daemon_path: Some("/custom/path/cmuxd".to_string()),
         };
         assert_eq!(c.daemon_path(), "/custom/path/cmuxd");

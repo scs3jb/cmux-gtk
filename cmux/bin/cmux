@@ -299,16 +299,20 @@ case "$command" in
   # ── SSH ──
   ssh)
     no_focus=false
+    agent_forward=false
     ssh_args=()
     while [[ $# -gt 0 ]]; do
       case "$1" in
         --no-focus) no_focus=true; shift ;;
+        -A|--forward-agent) agent_forward=true; shift ;;
         *) ssh_args+=("$1"); shift ;;
       esac
     done
     if $no_focus && [[ ${#ssh_args[@]} -gt 0 ]]; then
       dest="${ssh_args[0]}"
-      _cmux_json "workspace.create_ssh" "{\"destination\":\"$dest\",\"no_focus\":true}"
+      _cmux_json "workspace.create_ssh" "{\"destination\":\"$dest\",\"no_focus\":true,\"agent_forward\":$agent_forward}"
+    elif $agent_forward; then
+      _cmux_send "ssh -A ${ssh_args[*]}"
     else
       _cmux_send "ssh ${ssh_args[*]}"
     fi
@@ -335,6 +339,15 @@ case "$command" in
     [[ -n "$ws_name" ]] && params="${params}\"title\":\"$ws_name\","
     params="${params%,}}"
     _cmux_json "workspace.new" "$params"
+    ;;
+  new-browser|browser-workspace)
+    url=""
+    [[ $# -gt 0 ]] && url="$1"
+    if [[ -n "$url" ]]; then
+      _cmux_json "workspace.new_browser" "{\"url\":\"$url\"}"
+    else
+      _cmux_json "workspace.new_browser" "{}"
+    fi
     ;;
   select|sel)
     _cmux_send "select ${1:-}"

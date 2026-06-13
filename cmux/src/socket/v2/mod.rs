@@ -140,6 +140,7 @@ pub fn dispatch(json_line: &str, state: &Arc<SharedState>) -> Response {
         // Workspace commands
         "workspace.list" => workspace::handle_workspace_list(id, state),
         "workspace.new" => workspace::handle_workspace_new(id, &req.params, state),
+        "workspace.new_browser" => workspace::handle_workspace_new_browser(id, &req.params, state),
         "workspace.create" => workspace::handle_workspace_create(id, &req.params, state),
         "workspace.create_ssh" => workspace::handle_workspace_create_ssh(id, &req.params, state),
         "workspace.remote.status" => {

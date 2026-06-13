@@ -110,7 +110,13 @@ impl AppState {
             env_vars.push(("CMUX_RESTORE_SCROLLBACK_FILE", path));
         }
 
-        // Auto-inject shell integration via ZDOTDIR (zsh) or BASH_ENV (bash)
+        // For fish, prepend the shell-integration dir to XDG_DATA_DIRS so fish
+        // auto-sources `<dir>/fish/vendor_conf.d/cmux.fish` on startup. Computed
+        // here so the owned String outlives the `env_vars` borrows below.
+        let fish_data_dirs = fish_xdg_data_dirs(&shell_integration_dir);
+
+        // Auto-inject shell integration via ZDOTDIR (zsh), BASH_ENV (bash),
+        // or XDG_DATA_DIRS vendor_conf.d (fish).
         let shell = std::env::var("SHELL").unwrap_or_default();
         if shell.ends_with("/zsh") || shell.ends_with("/zsh5") {
             if let Some(ref dir) = zdotdir_var {
@@ -122,6 +128,10 @@ impl AppState {
         } else if shell.ends_with("/bash") {
             if let Some(ref path) = bash_env_var {
                 env_vars.push(("BASH_ENV", path));
+            }
+        } else if shell.ends_with("/fish") {
+            if let Some(ref dirs) = fish_data_dirs {
+                env_vars.push(("XDG_DATA_DIRS", dirs));
             }
         }
 
@@ -964,6 +974,26 @@ fn shell_injection_env_vars(
     (zdotdir, bash_env, original_zdotdir)
 }
 
+/// Compute the `XDG_DATA_DIRS` value for fish shell integration.
+///
+/// Fish auto-sources `fish/vendor_conf.d/*.fish` from every entry in
+/// `XDG_DATA_DIRS`. We prepend the shell-integration directory (which contains
+/// `fish/vendor_conf.d/cmux.fish`), preserving any existing value so the user's
+/// other vendored data is untouched. Returns `None` when the fish script is
+/// absent so we never hijack XDG_DATA_DIRS without a real integration file.
+fn fish_xdg_data_dirs(integration_dir: &Option<String>) -> Option<String> {
+    let dir = integration_dir.as_ref()?;
+    let fish_script = std::path::Path::new(dir).join("fish/vendor_conf.d/cmux.fish");
+    if !fish_script.exists() {
+        return None;
+    }
+    let existing = std::env::var("XDG_DATA_DIRS")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "/usr/local/share:/usr/share".to_string());
+    Some(format!("{dir}:{existing}"))
+}
+
 /// Write scrollback text to a temp file for session restore.
 /// Returns the file path on success, or `None` if writing fails.
 ///
@@ -1154,6 +1184,19 @@ pub fn apply_theme_from_settings() {
     if settings.tab_bar_font_size > 0.0 {
         let size = settings.tab_bar_font_size;
         let css = format!(".pane-tab {{ font-size: {size}px; }}\n");
+        let provider = gtk4::CssProvider::new();
+        provider.load_from_data(&css);
+        gtk4::style_context_add_provider_for_display(
+            &display,
+            &provider,
+            gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION + 1,
+        );
+    }
+
+    // Apply sidebar font size override if non-zero
+    if settings.sidebar_font_size > 0.0 {
+        let size = settings.sidebar_font_size;
+        let css = format!(".navigation-sidebar {{ font-size: {size}px; }}\n");
         let provider = gtk4::CssProvider::new();
         provider.load_from_data(&css);
         gtk4::style_context_add_provider_for_display(

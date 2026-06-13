@@ -66,6 +66,19 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
     tab_bar_font_size_row.set_text(&font_size_initial);
     theme_group.add(&tab_bar_font_size_row);
 
+    let sidebar_font_size_row = adw::EntryRow::new();
+    sidebar_font_size_row.set_title("Sidebar Font Size");
+    sidebar_font_size_row.set_tooltip_text(Some(
+        "Font size in pixels for the sidebar workspace list. Leave empty or 0 for system default.",
+    ));
+    let sidebar_font_size_initial = if current_settings.sidebar_font_size > 0.0 {
+        current_settings.sidebar_font_size.to_string()
+    } else {
+        String::new()
+    };
+    sidebar_font_size_row.set_text(&sidebar_font_size_initial);
+    theme_group.add(&sidebar_font_size_row);
+
     appearance_page.add(&theme_group);
 
     // ── Ghostty Terminal Themes group ──
@@ -479,6 +492,14 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
     engine_row.set_model(Some(&engine_list));
     engine_row.set_selected(current_settings.browser.search_engine.to_index());
     browser_group.add(&engine_row);
+
+    let custom_search_row = adw::EntryRow::new();
+    custom_search_row.set_title("Custom Search URL");
+    custom_search_row.set_tooltip_text(Some(
+        "Used when Search Engine is set to Custom. Use %s for the query (e.g. https://search.brave.com/search?q=%s).",
+    ));
+    custom_search_row.set_text(&current_settings.browser.custom_search_template);
+    browser_group.add(&custom_search_row);
 
     let home_row = adw::EntryRow::new();
     home_row.set_title("Home Page URL");
@@ -970,6 +991,7 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
         let pills_row = pills_row.clone();
         let focus_style_row = focus_style_row.clone();
         let engine_row = engine_row.clone();
+        let custom_search_row = custom_search_row.clone();
         let home_row = home_row.clone();
         let suggestions_row = suggestions_row.clone();
         let browser_theme_row = browser_theme_row.clone();
@@ -978,6 +1000,7 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
         let sound_preset_row = sound_preset_row.clone();
         let confirm_quit_row = confirm_quit_row.clone();
         let tab_bar_font_size_row = tab_bar_font_size_row.clone();
+        let sidebar_font_size_row = sidebar_font_size_row.clone();
         let warn_close_tab_row = warn_close_tab_row.clone();
         let cwd_inherit_row = cwd_inherit_row.clone();
         let plus_btn_row = plus_btn_row.clone();
@@ -1074,6 +1097,7 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
                 browser: BrowserSettings {
                     enabled: browser_enabled_row.is_active(),
                     search_engine: SearchEngine::from_index(engine_row.selected()),
+                    custom_search_template: custom_search_row.text().to_string(),
                     home_url,
                     search_suggestions: suggestions_row.is_active(),
                     http_allowlist: current_settings.browser.http_allowlist.clone(),
@@ -1091,6 +1115,11 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
                 copy_on_select: copy_on_select_row.is_active(),
                 confirm_quit: confirm_quit_row.is_active(),
                 tab_bar_font_size: tab_bar_font_size_row
+                    .text()
+                    .parse::<f32>()
+                    .unwrap_or(0.0)
+                    .max(0.0),
+                sidebar_font_size: sidebar_font_size_row
                     .text()
                     .parse::<f32>()
                     .unwrap_or(0.0)

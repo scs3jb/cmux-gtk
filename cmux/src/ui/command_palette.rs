@@ -211,6 +211,7 @@ fn build_actions(state: &Rc<AppState>) -> Rc<Vec<PaletteAction>> {
 
     let mut actions = vec![
         cmd("workspace.new", "New Workspace"),
+        cmd("workspace.new_browser", "New Browser Workspace"),
         cmd("pane.split_horizontal", "Split Horizontal"),
         cmd("pane.split_vertical", "Split Vertical"),
         cmd("pane.close", "Close Pane"),
@@ -515,6 +516,17 @@ fn execute_action(name: &str, state: &Rc<AppState>, on_refresh: &Rc<dyn Fn()>) {
     match name {
         "workspace.new" => {
             lock_or_recover(&state.shared.tab_manager).add_workspace(Workspace::new());
+        }
+        "workspace.new_browser" => {
+            let mut ws = Workspace::new();
+            let pid = ws
+                .focused_panel_id
+                .or_else(|| ws.panels.keys().next().copied());
+            if let Some(panel) = pid.and_then(|pid| ws.panels.get_mut(&pid)) {
+                panel.panel_type = PanelType::Browser;
+                panel.command = None;
+            }
+            lock_or_recover(&state.shared.tab_manager).add_workspace(ws);
         }
         "pane.split_horizontal" => {
             if let Some(ws) = lock_or_recover(&state.shared.tab_manager).selected_mut() {
