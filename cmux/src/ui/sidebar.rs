@@ -212,7 +212,10 @@ pub fn refresh_sidebar(list_box: &gtk4::ListBox, state: &Rc<AppState>) {
     // Each entry pairs a row widget with its workspace index (None for group
     // header rows), so selection and drag-drop keep using workspace indices.
     let (rows, selected_index): (Vec<(gtk4::ListBoxRow, Option<usize>)>, Option<usize>) = {
-        let tab_manager = lock_or_recover(&state.shared.tab_manager);
+        let mut tab_manager = lock_or_recover(&state.shared.tab_manager);
+        // Record focus history on the single chokepoint that runs after any
+        // selection change. No-ops when the selection is unchanged.
+        tab_manager.record_focus_if_changed();
         let selected_index = tab_manager.selected_index();
         // Pre-collect (index, id, title) so setup_row_context_menu can build the
         // "Move Focused Pane → …" submenu without re-locking tab_manager.
@@ -409,6 +412,27 @@ fn create_workspace_row(
         state_icon.add_css_class(css_class);
         state_icon.set_tooltip_text(Some(tooltip));
         header.append(&state_icon);
+
+        // Manual reconnect control — shown when the remote is not actively
+        // connected/connecting (i.e. errored, disconnected, or never started).
+        let show_reconnect = !matches!(
+            &workspace.remote_state,
+            Some(crate::remote::session::RemoteState::Connected { .. })
+                | Some(crate::remote::session::RemoteState::Connecting)
+        );
+        if show_reconnect {
+            let reconnect_btn = gtk4::Button::from_icon_name("view-refresh-symbolic");
+            reconnect_btn.add_css_class("flat");
+            reconnect_btn.add_css_class("circular");
+            reconnect_btn.set_tooltip_text(Some("Reconnect"));
+            let st = state.clone();
+            let wsid = workspace.id;
+            reconnect_btn.connect_clicked(move |_| {
+                st.shared
+                    .send_ui_event(crate::app::UiEvent::RemoteConnect { workspace_id: wsid });
+            });
+            header.append(&reconnect_btn);
+        }
     }
 
     let title_label = gtk4::Label::new(Some(workspace.display_title()));

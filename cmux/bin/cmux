@@ -393,6 +393,12 @@ case "$command" in
   last)
     _cmux_send "last"
     ;;
+  back)
+    _cmux_send "focus_back"
+    ;;
+  forward)
+    _cmux_send "focus_forward"
+    ;;
   rename)
     _cmux_send "rename \"${*}\""
     ;;

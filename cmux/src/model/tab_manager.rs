@@ -14,7 +14,14 @@ pub struct TabManager {
     selected_index: Option<usize>,
     /// Sidebar groups. A workspace references its group via `group_id`.
     groups: Vec<WorkspaceGroup>,
+    /// Focus history (workspace IDs, oldest first) for back/forward navigation.
+    focus_history: Vec<Uuid>,
+    /// Current position within `focus_history`.
+    focus_pos: usize,
 }
+
+/// Maximum number of entries retained in the focus history.
+const FOCUS_HISTORY_CAP: usize = 50;
 
 impl TabManager {
     /// Create a new TabManager with a single default workspace.
@@ -24,6 +31,8 @@ impl TabManager {
             workspaces: vec![ws],
             selected_index: Some(0),
             groups: Vec::new(),
+            focus_history: Vec::new(),
+            focus_pos: 0,
         }
     }
 
@@ -33,6 +42,8 @@ impl TabManager {
             workspaces: Vec::new(),
             selected_index: None,
             groups: Vec::new(),
+            focus_history: Vec::new(),
+            focus_pos: 0,
         }
     }
 
@@ -531,6 +542,62 @@ impl TabManager {
             .map(|ws| ws.unread_count)
             .sum()
     }
+
+    // -------------------------------------------------------------------
+    // Focus history (back/forward navigation)
+    // -------------------------------------------------------------------
+
+    /// Record the currently selected workspace as the newest focus-history
+    /// entry, unless it already is. Forward history (entries after the current
+    /// position) is discarded, mirroring browser back/forward semantics.
+    ///
+    /// Intended to be called from a single chokepoint after any selection
+    /// change (e.g. sidebar refresh); it is a no-op when the selection is
+    /// unchanged, so calling it on every UI refresh is safe.
+    pub fn record_focus_if_changed(&mut self) {
+        let Some(id) = self.selected_id() else {
+            return;
+        };
+        // Drop stale entries that no longer correspond to a live workspace.
+        if self.focus_history.get(self.focus_pos).copied() == Some(id) {
+            return;
+        }
+        self.focus_history.truncate(self.focus_pos + 1);
+        self.focus_history.push(id);
+        if self.focus_history.len() > FOCUS_HISTORY_CAP {
+            let drop = self.focus_history.len() - FOCUS_HISTORY_CAP;
+            self.focus_history.drain(0..drop);
+        }
+        self.focus_pos = self.focus_history.len() - 1;
+    }
+
+    /// Move one step back in focus history and select that workspace.
+    /// Returns the now-selected workspace ID, or `None` if there is no earlier
+    /// entry (or it no longer exists).
+    pub fn focus_back(&mut self) -> Option<Uuid> {
+        while self.focus_pos > 0 {
+            self.focus_pos -= 1;
+            if let Some(id) = self.focus_history.get(self.focus_pos).copied() {
+                if self.select_by_id(id) {
+                    return Some(id);
+                }
+            }
+        }
+        None
+    }
+
+    /// Move one step forward in focus history and select that workspace.
+    pub fn focus_forward(&mut self) -> Option<Uuid> {
+        while self.focus_pos + 1 < self.focus_history.len() {
+            self.focus_pos += 1;
+            if let Some(id) = self.focus_history.get(self.focus_pos).copied() {
+                if self.select_by_id(id) {
+                    return Some(id);
+                }
+            }
+        }
+        None
+    }
 }
 
 impl Default for TabManager {
@@ -807,5 +874,62 @@ mod tests {
         let mut tm = TabManager::empty();
         let a = tm.add_workspace(Workspace::new());
         assert!(!tm.assign_to_group(a, Some(Uuid::new_v4())));
+    }
+
+    #[test]
+    fn test_focus_history_back_forward() {
+        let mut tm = TabManager::empty();
+        let a = tm.add_workspace(Workspace::new());
+        let b = tm.add_workspace(Workspace::new());
+        let c = tm.add_workspace(Workspace::new());
+
+        // Simulate the UI chokepoint recording each focus change.
+        tm.select_by_id(a);
+        tm.record_focus_if_changed();
+        tm.select_by_id(b);
+        tm.record_focus_if_changed();
+        tm.select_by_id(c);
+        tm.record_focus_if_changed();
+
+        // Back: c -> b -> a
+        assert_eq!(tm.focus_back(), Some(b));
+        assert_eq!(tm.focus_back(), Some(a));
+        assert_eq!(tm.focus_back(), None); // no earlier entry
+
+        // Forward: a -> b -> c
+        assert_eq!(tm.focus_forward(), Some(b));
+        assert_eq!(tm.focus_forward(), Some(c));
+        assert_eq!(tm.focus_forward(), None);
+    }
+
+    #[test]
+    fn test_focus_history_unchanged_is_noop() {
+        let mut tm = TabManager::empty();
+        let a = tm.add_workspace(Workspace::new());
+        tm.select_by_id(a);
+        tm.record_focus_if_changed();
+        // Repeated recording of the same selection must not grow history.
+        tm.record_focus_if_changed();
+        tm.record_focus_if_changed();
+        assert_eq!(tm.focus_back(), None);
+    }
+
+    #[test]
+    fn test_focus_history_truncates_forward_branch() {
+        let mut tm = TabManager::empty();
+        let a = tm.add_workspace(Workspace::new());
+        let b = tm.add_workspace(Workspace::new());
+        let c = tm.add_workspace(Workspace::new());
+        for id in [a, b, c] {
+            tm.select_by_id(id);
+            tm.record_focus_if_changed();
+        }
+        // Go back to a, then focus b fresh — the forward branch (c) is dropped.
+        assert_eq!(tm.focus_back(), Some(b));
+        assert_eq!(tm.focus_back(), Some(a));
+        tm.select_by_id(b);
+        tm.record_focus_if_changed();
+        assert_eq!(tm.focus_forward(), None); // c no longer reachable forward
+        assert_eq!(tm.focus_back(), Some(a));
     }
 }

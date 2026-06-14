@@ -232,6 +232,8 @@ fn build_actions(state: &Rc<AppState>) -> Rc<Vec<PaletteAction>> {
         cmd("workspace.next", "Next Workspace"),
         cmd("workspace.previous", "Previous Workspace"),
         cmd("workspace.last", "Last Workspace"),
+        cmd("workspace.focus_back", "Back (Recently Focused)"),
+        cmd("workspace.focus_forward", "Forward (Recently Focused)"),
         cmd("workspace.latest_unread", "Jump to Latest Unread"),
         cmd("workspace.rename", "Rename Workspace"),
         cmd("workspace.pin", "Pin/Unpin Workspace"),
@@ -667,6 +669,12 @@ fn execute_action(name: &str, state: &Rc<AppState>, on_refresh: &Rc<dyn Fn()>) {
         }
         "workspace.last" => {
             lock_or_recover(&state.shared.tab_manager).select_last();
+        }
+        "workspace.focus_back" => {
+            lock_or_recover(&state.shared.tab_manager).focus_back();
+        }
+        "workspace.focus_forward" => {
+            lock_or_recover(&state.shared.tab_manager).focus_forward();
         }
         "workspace.latest_unread" => {
             let mut tm = lock_or_recover(&state.shared.tab_manager);

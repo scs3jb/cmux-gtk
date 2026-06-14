@@ -531,6 +531,44 @@ pub(super) fn handle_workspace_last(id: Value, state: &Arc<SharedState>) -> Resp
 }
 
 // -----------------------------------------------------------------------
+// workspace.focus_back / workspace.focus_forward
+// -----------------------------------------------------------------------
+
+pub(super) fn handle_workspace_focus_back(id: Value, state: &Arc<SharedState>) -> Response {
+    let selected = {
+        let mut tm = lock_or_recover(&state.tab_manager);
+        tm.focus_back()
+    };
+    if let Some(workspace_id) = selected {
+        mark_workspace_read(state, workspace_id);
+        state.notify_ui_refresh();
+        Response::success(
+            id,
+            serde_json::json!({"workspace_id": workspace_id.to_string()}),
+        )
+    } else {
+        Response::error(id, "no_history", "No earlier workspace in focus history")
+    }
+}
+
+pub(super) fn handle_workspace_focus_forward(id: Value, state: &Arc<SharedState>) -> Response {
+    let selected = {
+        let mut tm = lock_or_recover(&state.tab_manager);
+        tm.focus_forward()
+    };
+    if let Some(workspace_id) = selected {
+        mark_workspace_read(state, workspace_id);
+        state.notify_ui_refresh();
+        Response::success(
+            id,
+            serde_json::json!({"workspace_id": workspace_id.to_string()}),
+        )
+    } else {
+        Response::error(id, "no_history", "No later workspace in focus history")
+    }
+}
+
+// -----------------------------------------------------------------------
 // workspace.latest_unread
 // -----------------------------------------------------------------------
 
