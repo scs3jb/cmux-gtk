@@ -95,11 +95,10 @@ _cmux_act() {
   _cmux_emit "$(_cmux_send "$1")"
 }
 
-# Query command: always print the response (pretty-printed if python3 is present,
-# unless --raw style is implied). Errors still go to stderr.
-_cmux_query() {
-  local resp
-  resp=$(_cmux_rpc "$@")
+# Print a query response: errors→stderr; otherwise pretty-print JSON (raw on
+# --json/CMUX_JSON or when python3 is absent, or non-JSON like screen text).
+_cmux_print() {
+  local resp="$1"
   case "$resp" in
     *'"ok":false'*)
       _cmux_emit "$resp"; return $? ;;
@@ -110,6 +109,10 @@ _cmux_query() {
     printf '%s\n' "$resp"
   fi
 }
+
+# Query commands: send (V2 JSON / V1 text) and pretty-print the response.
+_cmux_query()    { _cmux_print "$(_cmux_rpc "$@")"; }
+_cmux_query_v1() { _cmux_print "$(_cmux_send "$1")"; }
 
 # ── Theme listing ─────────────────────────────────────────────────
 _cmux_list_themes() {
@@ -422,7 +425,7 @@ case "$command" in
 
   # ── Windows ──
   windows)
-    _cmux_send "list_windows"
+    _cmux_query_v1 "list_windows"
     ;;
   new-window)
     _cmux_send "new_window"
@@ -460,7 +463,7 @@ case "$command" in
 
   # ── Workspaces ──
   list|ls)
-    _cmux_send "list"
+    _cmux_query_v1 "list"
     ;;
   new)
     _cmux_act "new ${*}"
@@ -549,7 +552,7 @@ case "$command" in
     _cmux_act "select ${1:-}"
     ;;
   current)
-    _cmux_send "current"
+    _cmux_query_v1 "current"
     ;;
   close)
     _cmux_act "close_workspace ${*}"
@@ -584,7 +587,7 @@ case "$command" in
 
   # ── Surfaces ──
   surfaces)
-    _cmux_send "list_surfaces"
+    _cmux_query_v1 "list_surfaces"
     ;;
   send)
     _cmux_act "send ${*}"
@@ -624,7 +627,7 @@ case "$command" in
     if [[ $# -ge 2 ]]; then
       _cmux_send "set_status ${*}"
     else
-      _cmux_send "list_status"
+      _cmux_query_v1 "list_status"
     fi
     ;;
   progress)
@@ -643,7 +646,7 @@ case "$command" in
     _cmux_send "notify \"${1:-}\" \"${2:-}\""
     ;;
   notifications)
-    _cmux_send "list_notifications"
+    _cmux_query_v1 "list_notifications"
     ;;
 
   # ── Browser ──
