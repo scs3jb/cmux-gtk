@@ -56,15 +56,59 @@ _cmux_send() {
   fi
 }
 
-# ── JSON send (V2 protocol) ──────────────────────────────────────────
-_cmux_json() {
-  local method="$1"
-  shift
-  # NB: do not use ${1:-{}} — bash treats the inner `}` as the closing brace of
-  # the expansion and appends a stray `}`, corrupting every params object.
-  local params="${1:-}"
-  [[ -z "$params" ]] && params="{}"
+# ── JSON-RPC (V2 protocol) ───────────────────────────────────────────
+# Build the request envelope and return the raw response on stdout.
+# NB: do not use ${1:-{}} — bash treats the inner `}` as the closing brace of
+# the expansion and appends a stray `}`, corrupting every params object.
+_cmux_rpc() {
+  local method="$1"; shift
+  local params="${1:-}"; [[ -z "$params" ]] && params="{}"
   _cmux_send "{\"id\":\"cli\",\"method\":\"$method\",\"params\":$params}"
+}
+
+# Emit an RPC response for an ACTION command: silent on success, error message
+# to stderr (exit 1). Pass --json (or CMUX_JSON=1) to print the raw response.
+_cmux_emit() {
+  local resp="$1"
+  if [[ -n "${CMUX_JSON:-}" ]]; then
+    printf '%s\n' "$resp"
+    return 0
+  fi
+  case "$resp" in
+    *'"ok":false'*)
+      local msg
+      msg=$(printf '%s' "$resp" | sed -n 's/.*"message":"\([^"]*\)".*/\1/p')
+      [[ -z "$msg" ]] && msg=$(printf '%s' "$resp" | sed -n 's/.*"code":"\([^"]*\)".*/\1/p')
+      echo "cmux: ${msg:-request failed}" >&2
+      return 1 ;;
+    *) return 0 ;;  # success → silent
+  esac
+}
+
+# Action command: send and emit (silent on success).
+_cmux_json() {
+  _cmux_emit "$(_cmux_rpc "$@")"
+}
+
+# V1 text action: send a text command, emit (silent on success).
+_cmux_act() {
+  _cmux_emit "$(_cmux_send "$1")"
+}
+
+# Query command: always print the response (pretty-printed if python3 is present,
+# unless --raw style is implied). Errors still go to stderr.
+_cmux_query() {
+  local resp
+  resp=$(_cmux_rpc "$@")
+  case "$resp" in
+    *'"ok":false'*)
+      _cmux_emit "$resp"; return $? ;;
+  esac
+  if [[ -z "${CMUX_JSON:-}" ]] && command -v python3 >/dev/null 2>&1; then
+    printf '%s' "$resp" | python3 -m json.tool 2>/dev/null || printf '%s\n' "$resp"
+  else
+    printf '%s\n' "$resp"
+  fi
 }
 
 # ── Theme listing ─────────────────────────────────────────────────
@@ -160,7 +204,7 @@ _cmux_tmux_compat() {
       [[ -n "$target" ]] && _cmux_json "pane.focus" "{\"pane\":\"$target\"}"
       ;;
     kill-window|killw)
-      _cmux_send "close_workspace ${*}"
+      _cmux_act "close_workspace ${*}"
       ;;
     kill-pane|killp)
       _cmux_json "surface.close" "{}"
@@ -264,6 +308,12 @@ _cmux_tmux_compat() {
 }
 
 # ── Main ──────────────────────────────────────────────────────────────
+# Global --json flag: print raw JSON-RPC responses (incl. for action commands).
+if [[ "${1:-}" == "--json" ]]; then
+  export CMUX_JSON=1
+  shift
+fi
+
 if [[ $# -eq 0 ]]; then
   echo "Usage: cmux <command> [args...]"
   echo "Run 'cmux help' for available commands."
@@ -277,7 +327,10 @@ _cmux_print_help() {
   cat <<'EOF'
 cmux — CLI for a running cmux-gtk instance (talks over its Unix socket)
 
-Usage: cmux <command> [args...]
+Usage: cmux [--json] <command> [args...]
+
+  Action commands are silent on success (errors go to stderr); query commands
+  print their data. Pass --json (or set CMUX_JSON=1) to print raw JSON-RPC.
 
 Meta
   help                       Show this help
@@ -358,13 +411,13 @@ case "$command" in
     _cmux_send "ping"
     ;;
   tree)
-    _cmux_json "system.tree"
+    _cmux_query "system.tree"
     ;;
   capabilities)
-    _cmux_json "system.capabilities"
+    _cmux_query "system.capabilities"
     ;;
   identify)
-    _cmux_json "system.identify"
+    _cmux_query "system.identify"
     ;;
 
   # ── Windows ──
@@ -377,7 +430,7 @@ case "$command" in
   window)
     sub="${1:-}"; shift || true
     case "$sub" in
-      displays) _cmux_json "window.displays" "{}" ;;
+      displays) _cmux_query "window.displays" "{}" ;;
       display)  _cmux_json "window.display" "{\"monitor\":\"${1:-}\"}" ;;
       *) echo "usage: cmux window {displays|display <name|index>}" >&2 ;;
     esac
@@ -410,7 +463,7 @@ case "$command" in
     _cmux_send "list"
     ;;
   new)
-    _cmux_send "new ${*}"
+    _cmux_act "new ${*}"
     ;;
   new-workspace)
     ws_name=""
@@ -475,7 +528,7 @@ case "$command" in
     sub="${1:-list}"; shift || true
     case "$sub" in
       create) _cmux_json "workspace.group.create" "{\"name\":\"${1:-New Group}\"}" ;;
-      list)   _cmux_json "workspace.group.list" "{}" ;;
+      list)   _cmux_query "workspace.group.list" "{}" ;;
       assign) # group assign <group-id|null> [workspace-id]
         g="${1:-null}"; ws="${2:-}"
         if [[ "$g" == "null" || -z "$g" ]]; then gjson="null"; else gjson="\"$g\""; fi
@@ -493,40 +546,40 @@ case "$command" in
     esac
     ;;
   select|sel)
-    _cmux_send "select ${1:-}"
+    _cmux_act "select ${1:-}"
     ;;
   current)
     _cmux_send "current"
     ;;
   close)
-    _cmux_send "close_workspace ${*}"
+    _cmux_act "close_workspace ${*}"
     ;;
   next)
-    _cmux_send "next"
+    _cmux_act "next"
     ;;
   prev)
-    _cmux_send "prev"
+    _cmux_act "prev"
     ;;
   last)
-    _cmux_send "last"
+    _cmux_act "last"
     ;;
   reopen)
-    _cmux_send "reopen"
+    _cmux_act "reopen"
     ;;
   back)
-    _cmux_send "focus_back"
+    _cmux_act "focus_back"
     ;;
   forward)
-    _cmux_send "focus_forward"
+    _cmux_act "focus_forward"
     ;;
   hibernate)
-    _cmux_send "hibernate"
+    _cmux_act "hibernate"
     ;;
   wake)
-    _cmux_send "wake"
+    _cmux_act "wake"
     ;;
   rename)
-    _cmux_send "rename \"${*}\""
+    _cmux_act "rename \"${*}\""
     ;;
 
   # ── Surfaces ──
@@ -534,7 +587,7 @@ case "$command" in
     _cmux_send "list_surfaces"
     ;;
   send)
-    _cmux_send "send ${*}"
+    _cmux_act "send ${*}"
     ;;
   send-key)
     # Parse modifier+key syntax: ctrl+enter, shift+tab, ctrl+shift+c, arrow keys, etc.
