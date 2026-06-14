@@ -3,6 +3,7 @@
 use uuid::Uuid;
 
 use super::workspace::Workspace;
+use super::workspace_group::WorkspaceGroup;
 
 /// Manages all workspaces and tracks the currently selected one.
 ///
@@ -11,6 +12,8 @@ use super::workspace::Workspace;
 pub struct TabManager {
     workspaces: Vec<Workspace>,
     selected_index: Option<usize>,
+    /// Sidebar groups. A workspace references its group via `group_id`.
+    groups: Vec<WorkspaceGroup>,
 }
 
 impl TabManager {
@@ -20,6 +23,7 @@ impl TabManager {
         Self {
             workspaces: vec![ws],
             selected_index: Some(0),
+            groups: Vec::new(),
         }
     }
 
@@ -28,6 +32,7 @@ impl TabManager {
         Self {
             workspaces: Vec::new(),
             selected_index: None,
+            groups: Vec::new(),
         }
     }
 
@@ -401,6 +406,131 @@ impl TabManager {
 
         Some(target_workspace_id)
     }
+
+    // -------------------------------------------------------------------
+    // Workspace groups
+    // -------------------------------------------------------------------
+
+    /// All sidebar groups, in order.
+    pub fn groups(&self) -> &[WorkspaceGroup] {
+        &self.groups
+    }
+
+    /// Look up a group by ID.
+    pub fn group(&self, id: Uuid) -> Option<&WorkspaceGroup> {
+        self.groups.iter().find(|g| g.id == id)
+    }
+
+    /// Look up a group by ID mutably.
+    pub fn group_mut(&mut self, id: Uuid) -> Option<&mut WorkspaceGroup> {
+        self.groups.iter_mut().find(|g| g.id == id)
+    }
+
+    /// Replace the group list wholesale (used by session restore).
+    pub fn set_groups(&mut self, groups: Vec<WorkspaceGroup>) {
+        self.groups = groups;
+    }
+
+    /// Create a new group with the given name (optionally scoped to a window).
+    /// Returns the new group's ID.
+    pub fn create_group(&mut self, name: impl Into<String>, window_id: Option<Uuid>) -> Uuid {
+        let mut group = WorkspaceGroup::new(name);
+        group.window_id = window_id;
+        let id = group.id;
+        self.groups.push(group);
+        id
+    }
+
+    /// Delete a group, ungrouping any member workspaces. Returns true if found.
+    pub fn remove_group(&mut self, id: Uuid) -> bool {
+        let before = self.groups.len();
+        self.groups.retain(|g| g.id != id);
+        if self.groups.len() == before {
+            return false;
+        }
+        for ws in self.workspaces.iter_mut() {
+            if ws.group_id == Some(id) {
+                ws.group_id = None;
+            }
+        }
+        true
+    }
+
+    /// Rename a group. Returns true if found.
+    pub fn rename_group(&mut self, id: Uuid, name: impl Into<String>) -> bool {
+        match self.group_mut(id) {
+            Some(g) => {
+                g.name = name.into();
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Set a group's accent color (None clears it). Returns true if found.
+    pub fn set_group_color(&mut self, id: Uuid, color: Option<String>) -> bool {
+        match self.group_mut(id) {
+            Some(g) => {
+                g.color = color;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Toggle (or set) a group's collapsed state. Returns the new state, or
+    /// `None` if the group was not found.
+    pub fn set_group_collapsed(&mut self, id: Uuid, collapsed: Option<bool>) -> Option<bool> {
+        let g = self.group_mut(id)?;
+        g.collapsed = collapsed.unwrap_or(!g.collapsed);
+        Some(g.collapsed)
+    }
+
+    /// Assign a workspace to a group (or `None` to ungroup it). Member
+    /// workspaces are kept contiguous by moving the workspace next to the
+    /// group's existing members. Returns true if the workspace was found.
+    pub fn assign_to_group(&mut self, workspace_id: Uuid, group_id: Option<Uuid>) -> bool {
+        // Validate the target group exists when assigning.
+        if let Some(gid) = group_id {
+            if self.group(gid).is_none() {
+                return false;
+            }
+        }
+        let Some(idx) = self.workspace_index(workspace_id) else {
+            return false;
+        };
+        self.workspaces[idx].group_id = group_id;
+
+        // Keep members contiguous: move the workspace to sit just after the
+        // last existing member of the target group (if any others exist).
+        if let Some(gid) = group_id {
+            if let Some(last_member) = self
+                .workspaces
+                .iter()
+                .enumerate()
+                .filter(|(i, ws)| *i != idx && ws.group_id == Some(gid))
+                .map(|(i, _)| i)
+                .next_back()
+            {
+                let to = if last_member > idx {
+                    last_member
+                } else {
+                    last_member + 1
+                };
+                self.move_workspace(idx, to);
+            }
+        }
+        true
+    }
+
+    /// Sum of unread counts across a group's member workspaces.
+    pub fn group_unread_count(&self, group_id: Uuid) -> u32 {
+        self.workspaces
+            .iter()
+            .filter(|ws| ws.group_id == Some(group_id))
+            .map(|ws| ws.unread_count)
+            .sum()
+    }
 }
 
 impl Default for TabManager {
@@ -601,5 +731,81 @@ mod tests {
         assert!(tm.move_workspace(1, 1));
         assert_eq!(tm.selected_index(), Some(1));
         assert!(!tm.move_workspace(3, 3));
+    }
+
+    #[test]
+    fn test_create_and_assign_group() {
+        let mut tm = TabManager::empty();
+        let a = tm.add_workspace(Workspace::new());
+        let b = tm.add_workspace(Workspace::new());
+        let gid = tm.create_group("Work", None);
+        assert!(tm.assign_to_group(a, Some(gid)));
+        assert!(tm.assign_to_group(b, Some(gid)));
+        assert_eq!(tm.workspace(a).unwrap().group_id, Some(gid));
+        assert_eq!(tm.workspace(b).unwrap().group_id, Some(gid));
+    }
+
+    #[test]
+    fn test_assign_keeps_members_contiguous() {
+        let mut tm = TabManager::empty();
+        let a = tm.add_workspace(Workspace::new());
+        let _b = tm.add_workspace(Workspace::new());
+        let c = tm.add_workspace(Workspace::new());
+        let gid = tm.create_group("G", None);
+        // Assign the two non-adjacent workspaces (index 0 and 2) to the group.
+        assert!(tm.assign_to_group(a, Some(gid)));
+        assert!(tm.assign_to_group(c, Some(gid)));
+        // The group's members should now be adjacent in the workspace order.
+        let positions: Vec<usize> = tm
+            .iter()
+            .enumerate()
+            .filter(|(_, ws)| ws.group_id == Some(gid))
+            .map(|(i, _)| i)
+            .collect();
+        assert_eq!(positions.len(), 2);
+        assert_eq!(positions[1] - positions[0], 1, "members must be contiguous");
+    }
+
+    #[test]
+    fn test_group_unread_sums_members() {
+        let mut tm = TabManager::empty();
+        let a = tm.add_workspace(Workspace::new());
+        let b = tm.add_workspace(Workspace::new());
+        let gid = tm.create_group("G", None);
+        tm.assign_to_group(a, Some(gid));
+        tm.assign_to_group(b, Some(gid));
+        tm.workspace_mut(a).unwrap().unread_count = 3;
+        tm.workspace_mut(b).unwrap().unread_count = 4;
+        assert_eq!(tm.group_unread_count(gid), 7);
+    }
+
+    #[test]
+    fn test_remove_group_ungroups_members() {
+        let mut tm = TabManager::empty();
+        let a = tm.add_workspace(Workspace::new());
+        let gid = tm.create_group("G", None);
+        tm.assign_to_group(a, Some(gid));
+        assert!(tm.remove_group(gid));
+        assert_eq!(tm.workspace(a).unwrap().group_id, None);
+        assert!(tm.group(gid).is_none());
+    }
+
+    #[test]
+    fn test_collapse_toggle_and_color() {
+        let mut tm = TabManager::empty();
+        tm.add_workspace(Workspace::new());
+        let gid = tm.create_group("G", None);
+        assert_eq!(tm.set_group_collapsed(gid, None), Some(true));
+        assert_eq!(tm.set_group_collapsed(gid, None), Some(false));
+        assert_eq!(tm.set_group_collapsed(gid, Some(true)), Some(true));
+        assert!(tm.set_group_color(gid, Some("blue".into())));
+        assert_eq!(tm.group(gid).unwrap().color.as_deref(), Some("blue"));
+    }
+
+    #[test]
+    fn test_assign_to_nonexistent_group_fails() {
+        let mut tm = TabManager::empty();
+        let a = tm.add_workspace(Workspace::new());
+        assert!(!tm.assign_to_group(a, Some(Uuid::new_v4())));
     }
 }

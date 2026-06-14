@@ -257,6 +257,7 @@ pub fn create_snapshot(state: &crate::app::AppState) -> AppSessionSnapshot {
             is_pinned: ws.is_pinned,
             current_directory: ws.current_directory.clone(),
             focused_panel_id: ws.focused_panel_id,
+            group_id: ws.group_id,
             layout,
             panels,
             status_entries: ws.status_entries.clone(),
@@ -286,6 +287,18 @@ pub fn create_snapshot(state: &crate::app::AppState) -> AppSessionSnapshot {
             let (w, h) = window_id
                 .and_then(|wid| window_sizes.get(&wid).copied())
                 .unwrap_or((1280, 860));
+            // Include the groups scoped to this window.
+            let groups: Vec<crate::session::snapshot::SessionGroupSnapshot> = tm
+                .groups()
+                .iter()
+                .filter(|g| g.window_id == window_id)
+                .map(|g| crate::session::snapshot::SessionGroupSnapshot {
+                    id: g.id,
+                    name: g.name.clone(),
+                    color: g.color.clone(),
+                    collapsed: g.collapsed,
+                })
+                .collect();
             SessionWindowSnapshot {
                 frame: Some(SessionRectSnapshot {
                     x: 0.0,
@@ -296,6 +309,7 @@ pub fn create_snapshot(state: &crate::app::AppState) -> AppSessionSnapshot {
                 tab_manager: SessionTabManagerSnapshot {
                     selected_workspace_index: Some(0),
                     workspaces,
+                    groups,
                 },
                 sidebar: SessionSidebarSnapshot {
                     is_visible: true,

@@ -30,6 +30,21 @@ pub struct SessionWindowSnapshot {
 pub struct SessionTabManagerSnapshot {
     pub selected_workspace_index: Option<usize>,
     pub workspaces: Vec<SessionWorkspaceSnapshot>,
+    /// Sidebar workspace groups (scoped to this window).
+    #[serde(default)]
+    pub groups: Vec<SessionGroupSnapshot>,
+}
+
+/// Workspace group snapshot.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionGroupSnapshot {
+    pub id: Uuid,
+    pub name: String,
+    #[serde(default)]
+    pub color: Option<String>,
+    #[serde(default)]
+    pub collapsed: bool,
 }
 
 /// Workspace snapshot.
@@ -42,6 +57,9 @@ pub struct SessionWorkspaceSnapshot {
     pub is_pinned: bool,
     pub current_directory: String,
     pub focused_panel_id: Option<Uuid>,
+    /// Group this workspace belongs to (None = ungrouped).
+    #[serde(default)]
+    pub group_id: Option<Uuid>,
     pub layout: SessionWorkspaceLayoutSnapshot,
     pub panels: Vec<SessionPanelSnapshot>,
     pub status_entries: Vec<StatusEntry>,

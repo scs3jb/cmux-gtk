@@ -780,6 +780,7 @@ fn restore_session(state: &Rc<AppState>) -> Vec<Uuid> {
     // handlers that need to read workspace state during startup.
     let mut restored_tm = TabManager::empty();
     let mut window_ids: Vec<Uuid> = Vec::new();
+    let mut restored_groups: Vec<crate::model::WorkspaceGroup> = Vec::new();
 
     for window_snapshot in &live_windows {
         let window_id = Uuid::new_v4();
@@ -797,6 +798,18 @@ fn restore_session(state: &Rc<AppState>) -> Vec<Uuid> {
 
         let tm_snapshot = &window_snapshot.tab_manager;
 
+        // Restore this window's workspace groups, preserving their IDs so
+        // workspace.group_id references stay valid.
+        for group_snapshot in &tm_snapshot.groups {
+            restored_groups.push(crate::model::WorkspaceGroup {
+                id: group_snapshot.id,
+                name: group_snapshot.name.clone(),
+                color: group_snapshot.color.clone(),
+                collapsed: group_snapshot.collapsed,
+                window_id: Some(window_id),
+            });
+        }
+
         for ws_snapshot in &tm_snapshot.workspaces {
             if ws_snapshot.panels.is_empty() {
                 continue; // Skip workspaces with no panels
@@ -813,6 +826,7 @@ fn restore_session(state: &Rc<AppState>) -> Vec<Uuid> {
             workspace.progress = ws_snapshot.progress.clone();
             workspace.git_branch = ws_snapshot.git_branch.clone();
             workspace.remote_config = ws_snapshot.remote_config.clone();
+            workspace.group_id = ws_snapshot.group_id;
 
             let layout = ws_snapshot.layout.to_layout();
             let mut panels = std::collections::HashMap::new();
@@ -883,6 +897,8 @@ fn restore_session(state: &Rc<AppState>) -> Vec<Uuid> {
             restored_tm.add_workspace(workspace);
         }
     }
+
+    restored_tm.set_groups(restored_groups);
 
     tracing::info!(
         "Restored {} workspaces across {} windows from session",

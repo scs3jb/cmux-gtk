@@ -65,6 +65,8 @@ pub struct Workspace {
     pub pr_checks: Vec<PrCheck>,
     /// Window this workspace belongs to (None = default/first window).
     pub window_id: Option<Uuid>,
+    /// Sidebar group this workspace belongs to (None = ungrouped).
+    pub group_id: Option<Uuid>,
     /// Remote SSH configuration (None for local workspaces).
     pub remote_config: Option<crate::remote::session::RemoteConfig>,
     /// Remote connection state (None for local workspaces).
@@ -187,6 +189,7 @@ impl Workspace {
             pr_url: None,
             pr_checks: Vec::new(),
             window_id: None,
+            group_id: None,
             remote_config: None,
             remote_state: None,
             imessage_mode: false,

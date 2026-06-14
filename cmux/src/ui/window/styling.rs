@@ -33,6 +33,22 @@ pub(super) fn install_css() {
             margin: 1px 4px;
         }
 
+        /* ── Workspace group header ── */
+        .workspace-group-header {
+            border-radius: 6px;
+            margin: 2px 4px 0px 4px;
+            opacity: 0.85;
+        }
+        .workspace-group-header:hover {
+            opacity: 1.0;
+            background: alpha(@window_fg_color, 0.06);
+        }
+
+        /* ── Workspaces nested inside a group are slightly indented ── */
+        .workspace-row-grouped {
+            margin-left: 12px;
+        }
+
         .workspace-row-colored {
             border-radius: 8px;
             border-left: 4px solid transparent;

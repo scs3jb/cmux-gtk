@@ -10,6 +10,7 @@
 //! {"id": "1", "ok": true, "result": {...}}
 //! ```
 
+mod group;
 mod helpers;
 mod markdown;
 mod notification;
@@ -141,6 +142,13 @@ pub fn dispatch(json_line: &str, state: &Arc<SharedState>) -> Response {
         "workspace.list" => workspace::handle_workspace_list(id, state),
         "workspace.new" => workspace::handle_workspace_new(id, &req.params, state),
         "workspace.new_browser" => workspace::handle_workspace_new_browser(id, &req.params, state),
+        "workspace.group.create" => group::handle_group_create(id, &req.params, state),
+        "workspace.group.list" => group::handle_group_list(id, state),
+        "workspace.group.assign" => group::handle_group_assign(id, &req.params, state),
+        "workspace.group.rename" => group::handle_group_rename(id, &req.params, state),
+        "workspace.group.collapse" => group::handle_group_collapse(id, &req.params, state),
+        "workspace.group.color" => group::handle_group_color(id, &req.params, state),
+        "workspace.group.delete" => group::handle_group_delete(id, &req.params, state),
         "workspace.create" => workspace::handle_workspace_create(id, &req.params, state),
         "workspace.create_ssh" => workspace::handle_workspace_create_ssh(id, &req.params, state),
         "workspace.remote.status" => {

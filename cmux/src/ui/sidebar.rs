@@ -209,7 +209,9 @@ pub fn refresh_sidebar(list_box: &gtk4::ListBox, state: &Rc<AppState>) {
     // so that setup_row_context_menu does not re-acquire tab_manager while the
     // lock is already held (std::sync::Mutex is not re-entrant).
     let sidebar_settings = crate::settings::load().sidebar;
-    let (rows, selected_index): (Vec<gtk4::ListBoxRow>, Option<usize>) = {
+    // Each entry pairs a row widget with its workspace index (None for group
+    // header rows), so selection and drag-drop keep using workspace indices.
+    let (rows, selected_index): (Vec<(gtk4::ListBoxRow, Option<usize>)>, Option<usize>) = {
         let tab_manager = lock_or_recover(&state.shared.tab_manager);
         let selected_index = tab_manager.selected_index();
         // Pre-collect (index, id, title) so setup_row_context_menu can build the
@@ -219,34 +221,64 @@ pub fn refresh_sidebar(list_box: &gtk4::ListBox, state: &Rc<AppState>) {
             .enumerate()
             .map(|(i, ws)| (i, ws.id, ws.display_title().to_string()))
             .collect();
-        let rows = tab_manager
+        // Pre-collect groups (id, name) for the workspace "Add to Group" menu.
+        let all_groups: Vec<(uuid::Uuid, String)> = tab_manager
+            .groups()
             .iter()
-            .enumerate()
-            .map(|(index, workspace)| {
-                let row = create_workspace_row(workspace, index, &sidebar_settings, state);
-                setup_row_context_menu(
-                    &row,
-                    index,
-                    workspace.is_pinned,
-                    workspace.window_id,
-                    workspace.id,
-                    workspace.remote_config.is_some(),
-                    &all_workspaces,
-                    state,
-                );
-                setup_row_close_button(&row, index, state);
-                row
-            })
+            .map(|g| (g.id, g.name.clone()))
             .collect();
+        let mut rows: Vec<(gtk4::ListBoxRow, Option<usize>)> = Vec::new();
+        let mut rendered_groups: std::collections::HashSet<uuid::Uuid> =
+            std::collections::HashSet::new();
+        for (index, workspace) in tab_manager.iter().enumerate() {
+            // Insert a group header before the first member of each group, and
+            // hide member rows when the group is collapsed.
+            let mut collapsed = false;
+            if let Some(gid) = workspace.group_id {
+                if let Some(group) = tab_manager.group(gid) {
+                    collapsed = group.collapsed;
+                    if rendered_groups.insert(gid) {
+                        let unread = tab_manager.group_unread_count(gid);
+                        let header = create_group_header_row(group, unread, state);
+                        rows.push((header, None));
+                    }
+                }
+                if collapsed {
+                    continue;
+                }
+            }
+            let row = create_workspace_row(workspace, index, &sidebar_settings, state);
+            if workspace.group_id.is_some() {
+                row.add_css_class("workspace-row-grouped");
+            }
+            setup_row_context_menu(
+                &row,
+                index,
+                workspace.is_pinned,
+                workspace.window_id,
+                workspace.id,
+                workspace.remote_config.is_some(),
+                workspace.group_id,
+                &all_workspaces,
+                &all_groups,
+                state,
+            );
+            setup_row_close_button(&row, index, state);
+            rows.push((row, Some(index)));
+        }
         (rows, selected_index)
     };
 
-    for (index, row) in rows.iter().enumerate() {
-        // Drag-and-drop for workspace reordering
-        setup_row_drag_drop(row, index, state);
+    for (row, ws_index) in rows.iter() {
+        // Drag-and-drop for workspace reordering (workspace rows only)
+        if let Some(idx) = ws_index {
+            setup_row_drag_drop(row, *idx, state);
+        }
         list_box.append(row);
-        if selected_index == Some(index) {
-            list_box.select_row(Some(row));
+        if let Some(idx) = ws_index {
+            if selected_index == Some(*idx) {
+                list_box.select_row(Some(row));
+            }
         }
     }
 
@@ -852,6 +884,233 @@ fn create_workspace_row(
     row
 }
 
+/// Build a non-selectable group header row with collapse toggle, color,
+/// name, unread badge, and a right-click context menu.
+fn create_group_header_row(
+    group: &crate::model::WorkspaceGroup,
+    unread: u32,
+    state: &Rc<AppState>,
+) -> gtk4::ListBoxRow {
+    let group_id = group.id;
+    let row = gtk4::ListBoxRow::new();
+    row.set_selectable(false);
+    row.set_activatable(false);
+    row.add_css_class("workspace-group-header");
+
+    // Colored left border when a group color is set.
+    if let Some(ref color) = group.color {
+        let css = gtk4::CssProvider::new();
+        css.load_from_data(&format!("row {{ border-left: 3px solid {color}; }}"));
+        row.style_context()
+            .add_provider(&css, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION);
+    }
+
+    let hbox = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+    hbox.set_margin_start(8);
+    hbox.set_margin_end(10);
+    hbox.set_margin_top(3);
+    hbox.set_margin_bottom(3);
+
+    let chevron = gtk4::Image::from_icon_name(if group.collapsed {
+        "pan-end-symbolic"
+    } else {
+        "pan-down-symbolic"
+    });
+    chevron.set_pixel_size(12);
+    chevron.add_css_class("dim-label");
+    hbox.append(&chevron);
+
+    let name = gtk4::Label::new(Some(&group.name));
+    name.add_css_class("caption-heading");
+    name.set_ellipsize(gtk4::pango::EllipsizeMode::End);
+    name.set_xalign(0.0);
+    hbox.append(&name);
+
+    let spacer = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+    spacer.set_hexpand(true);
+    hbox.append(&spacer);
+
+    if unread > 0 {
+        let badge = gtk4::Label::new(Some(&unread.to_string()));
+        badge.add_css_class("badge");
+        badge.add_css_class("accent");
+        hbox.append(&badge);
+    }
+
+    row.set_child(Some(&hbox));
+
+    // Left-click toggles collapse.
+    {
+        let click = gtk4::GestureClick::new();
+        click.set_button(1);
+        let state = state.clone();
+        click.connect_released(move |_, _, _, _| {
+            let mut tm = lock_or_recover(&state.shared.tab_manager);
+            tm.set_group_collapsed(group_id, None);
+            drop(tm);
+            state.shared.notify_ui_refresh();
+        });
+        row.add_controller(click);
+    }
+
+    // Right-click context menu.
+    let menu = gtk4::gio::Menu::new();
+    menu.append(
+        Some(if group.collapsed { "Expand" } else { "Collapse" }),
+        Some("group.collapse"),
+    );
+    menu.append(Some("Rename"), Some("group.rename"));
+    let color_menu = gtk4::gio::Menu::new();
+    for (label, color) in &[
+        ("Red", "red"),
+        ("Orange", "orange"),
+        ("Yellow", "yellow"),
+        ("Green", "green"),
+        ("Teal", "teal"),
+        ("Blue", "blue"),
+        ("Purple", "purple"),
+        ("Pink", "pink"),
+        ("None", ""),
+    ] {
+        color_menu.append(Some(label), Some(&format!("group.color.{color}")));
+    }
+    menu.append_submenu(Some("Set Color"), &color_menu);
+    menu.append(Some("New Workspace in Group"), Some("group.new-ws"));
+    let delete_menu = gtk4::gio::Menu::new();
+    delete_menu.append(Some("Delete Group"), Some("group.delete"));
+    menu.append_section(None, &delete_menu);
+
+    let popover = gtk4::PopoverMenu::from_model(Some(&menu));
+    popover.set_parent(&row);
+    popover.set_has_arrow(false);
+    {
+        let gesture = gtk4::GestureClick::new();
+        gesture.set_button(3);
+        let popover = popover.clone();
+        gesture.connect_pressed(move |gesture, _n, x, y| {
+            gesture.set_state(gtk4::EventSequenceState::Claimed);
+            popover.set_pointing_to(Some(&gdk4::Rectangle::new(x as i32, y as i32, 1, 1)));
+            popover.popup();
+        });
+        row.add_controller(gesture);
+    }
+
+    // Actions
+    let ag = gtk4::gio::SimpleActionGroup::new();
+    {
+        let collapse = gtk4::gio::SimpleAction::new("collapse", None);
+        let state = state.clone();
+        collapse.connect_activate(move |_, _| {
+            let mut tm = lock_or_recover(&state.shared.tab_manager);
+            tm.set_group_collapsed(group_id, None);
+            drop(tm);
+            state.shared.notify_ui_refresh();
+        });
+        ag.add_action(&collapse);
+    }
+    {
+        let rename = gtk4::gio::SimpleAction::new("rename", None);
+        let state = state.clone();
+        let row_weak = row.downgrade();
+        let current = group.name.clone();
+        rename.connect_activate(move |_, _| {
+            if let Some(row) = row_weak.upgrade() {
+                if let Some(root) = row.root() {
+                    if let Some(window) = root.downcast_ref::<libadwaita::ApplicationWindow>() {
+                        show_group_rename(window, &state, group_id, &current);
+                    }
+                }
+            }
+        });
+        ag.add_action(&rename);
+    }
+    for color in &[
+        "red", "orange", "yellow", "green", "teal", "blue", "purple", "pink", "",
+    ] {
+        let action = gtk4::gio::SimpleAction::new(&format!("color.{color}"), None);
+        let state = state.clone();
+        let color_value = if color.is_empty() {
+            None
+        } else {
+            Some(color.to_string())
+        };
+        action.connect_activate(move |_, _| {
+            let mut tm = lock_or_recover(&state.shared.tab_manager);
+            tm.set_group_color(group_id, color_value.clone());
+            drop(tm);
+            state.shared.notify_ui_refresh();
+        });
+        ag.add_action(&action);
+    }
+    {
+        let new_ws = gtk4::gio::SimpleAction::new("new-ws", None);
+        let state = state.clone();
+        new_ws.connect_activate(move |_, _| {
+            let mut tm = lock_or_recover(&state.shared.tab_manager);
+            let win = tm.group(group_id).and_then(|g| g.window_id);
+            let mut ws = crate::model::Workspace::new();
+            ws.window_id = win;
+            let ws_id = tm.add_workspace(ws);
+            tm.assign_to_group(ws_id, Some(group_id));
+            drop(tm);
+            state.shared.notify_ui_refresh();
+        });
+        ag.add_action(&new_ws);
+    }
+    {
+        let delete = gtk4::gio::SimpleAction::new("delete", None);
+        let state = state.clone();
+        delete.connect_activate(move |_, _| {
+            let mut tm = lock_or_recover(&state.shared.tab_manager);
+            tm.remove_group(group_id);
+            drop(tm);
+            state.shared.notify_ui_refresh();
+        });
+        ag.add_action(&delete);
+    }
+    row.insert_action_group("group", Some(&ag));
+
+    row
+}
+
+/// Show a small dialog to rename a workspace group.
+fn show_group_rename(
+    window: &libadwaita::ApplicationWindow,
+    state: &Rc<AppState>,
+    group_id: uuid::Uuid,
+    current_name: &str,
+) {
+    use libadwaita::prelude::*;
+    let dialog = libadwaita::MessageDialog::new(Some(window), Some("Rename Group"), None);
+    let entry = gtk4::Entry::new();
+    entry.set_text(current_name);
+    entry.set_activates_default(true);
+    dialog.set_extra_child(Some(&entry));
+    dialog.add_response("cancel", "Cancel");
+    dialog.add_response("rename", "Rename");
+    dialog.set_default_response(Some("rename"));
+    dialog.set_response_appearance("rename", libadwaita::ResponseAppearance::Suggested);
+
+    let state = state.clone();
+    let entry_for_cb = entry.clone();
+    dialog.connect_response(None, move |_, response| {
+        if response != "rename" {
+            return;
+        }
+        let name = entry_for_cb.text().to_string();
+        if name.trim().is_empty() {
+            return;
+        }
+        let mut tm = lock_or_recover(&state.shared.tab_manager);
+        tm.rename_group(group_id, name);
+        drop(tm);
+        state.shared.notify_ui_refresh();
+    });
+    dialog.present();
+    entry.grab_focus();
+    entry.select_region(0, -1);
+}
+
 /// Set up right-click context menu on a sidebar row.
 #[allow(clippy::too_many_arguments)]
 fn setup_row_context_menu(
@@ -861,7 +1120,9 @@ fn setup_row_context_menu(
     window_id: Option<uuid::Uuid>,
     workspace_id: uuid::Uuid,
     has_remote: bool,
+    current_group_id: Option<uuid::Uuid>,
     all_workspaces: &[(usize, uuid::Uuid, String)],
+    all_groups: &[(uuid::Uuid, String)],
     state: &Rc<AppState>,
 ) {
     let menu = gtk4::gio::Menu::new();
@@ -979,6 +1240,31 @@ fn setup_row_context_menu(
             Some(&format!("sidebar.remote-disconnect.{index}")),
         );
         menu.append_section(None, &remote_menu);
+    }
+
+    // Group section — assign to an existing group, create a new one, or remove.
+    {
+        let group_menu = gtk4::gio::Menu::new();
+        group_menu.append(
+            Some("New Group…"),
+            Some(&format!("sidebar.new-group.{index}")),
+        );
+        for (gid, name) in all_groups {
+            if current_group_id == Some(*gid) {
+                continue;
+            }
+            group_menu.append(
+                Some(&format!("Add to: {name}")),
+                Some(&format!("sidebar.add-to-group.{index}.{gid}")),
+            );
+        }
+        if current_group_id.is_some() {
+            group_menu.append(
+                Some("Remove from Group"),
+                Some(&format!("sidebar.remove-from-group.{index}")),
+            );
+        }
+        menu.append_submenu(Some("Group"), &group_menu);
     }
 
     // Close section
@@ -1380,6 +1666,53 @@ fn setup_row_context_menu(
             });
         }
         action_group.add_action(&disconnect_action);
+    }
+
+    // Group: new group (assign this workspace to a freshly created group)
+    {
+        let new_group_action = gtk4::gio::SimpleAction::new(&format!("new-group.{index}"), None);
+        let state = state.clone();
+        new_group_action.connect_activate(move |_, _| {
+            let mut tm = lock_or_recover(&state.shared.tab_manager);
+            let win = tm.workspace(workspace_id).and_then(|ws| ws.window_id);
+            let gid = tm.create_group("New Group", win);
+            tm.assign_to_group(workspace_id, Some(gid));
+            drop(tm);
+            state.shared.notify_ui_refresh();
+        });
+        action_group.add_action(&new_group_action);
+    }
+
+    // Group: add to an existing group
+    for (gid, _name) in all_groups {
+        if current_group_id == Some(*gid) {
+            continue;
+        }
+        let action_name = format!("add-to-group.{index}.{gid}");
+        let add_action = gtk4::gio::SimpleAction::new(&action_name, None);
+        let target_gid = *gid;
+        let state = state.clone();
+        add_action.connect_activate(move |_, _| {
+            let mut tm = lock_or_recover(&state.shared.tab_manager);
+            tm.assign_to_group(workspace_id, Some(target_gid));
+            drop(tm);
+            state.shared.notify_ui_refresh();
+        });
+        action_group.add_action(&add_action);
+    }
+
+    // Group: remove from current group
+    if current_group_id.is_some() {
+        let remove_action =
+            gtk4::gio::SimpleAction::new(&format!("remove-from-group.{index}"), None);
+        let state = state.clone();
+        remove_action.connect_activate(move |_, _| {
+            let mut tm = lock_or_recover(&state.shared.tab_manager);
+            tm.assign_to_group(workspace_id, None);
+            drop(tm);
+            state.shared.notify_ui_refresh();
+        });
+        action_group.add_action(&remove_action);
     }
 
     row.insert_action_group("sidebar", Some(&action_group));

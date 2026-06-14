@@ -349,6 +349,27 @@ case "$command" in
       _cmux_json "workspace.new_browser" "{}"
     fi
     ;;
+  group)
+    sub="${1:-list}"; shift || true
+    case "$sub" in
+      create) _cmux_json "workspace.group.create" "{\"name\":\"${1:-New Group}\"}" ;;
+      list)   _cmux_json "workspace.group.list" "{}" ;;
+      assign) # group assign <group-id|null> [workspace-id]
+        g="${1:-null}"; ws="${2:-}"
+        if [[ "$g" == "null" || -z "$g" ]]; then gjson="null"; else gjson="\"$g\""; fi
+        if [[ -n "$ws" ]]; then
+          _cmux_json "workspace.group.assign" "{\"group\":$gjson,\"workspace\":\"$ws\"}"
+        else
+          _cmux_json "workspace.group.assign" "{\"group\":$gjson}"
+        fi
+        ;;
+      rename)   _cmux_json "workspace.group.rename" "{\"group\":\"${1:-}\",\"name\":\"${2:-}\"}" ;;
+      collapse) _cmux_json "workspace.group.collapse" "{\"group\":\"${1:-}\"}" ;;
+      color)    _cmux_json "workspace.group.color" "{\"group\":\"${1:-}\",\"color\":\"${2:-}\"}" ;;
+      delete)   _cmux_json "workspace.group.delete" "{\"group\":\"${1:-}\"}" ;;
+      *) echo "usage: cmux group {create <name>|list|assign <group|null> [ws]|rename <group> <name>|collapse <group>|color <group> <color>|delete <group>}" >&2 ;;
+    esac
+    ;;
   select|sel)
     _cmux_send "select ${1:-}"
     ;;

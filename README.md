@@ -57,6 +57,7 @@ cargo build --release --no-default-features --features cmux/link-ghostty
 - **Theme browser** — `cmux themes [filter]` lists bundled ghostty themes from system and user directories
 - **Multi-window** — workspaces assignable across windows
 - **Workspace management** — pinning, custom colors, reorder, close-others/above/below
+- **Workspace groups** — collapsible sidebar sections with per-group color, unread badges, drag-anchored membership, session persistence, and `cmux group` CLI / `workspace.group.*` socket commands
 - **Welcome screen** — first-launch getting-started tips
 
 ## Architecture
