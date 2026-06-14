@@ -493,6 +493,17 @@ pub(super) fn bind_shared_state_updates(
                             }
                         }
                     }
+                    UiEvent::ListDisplays { reply } => {
+                        let names = list_monitor_names();
+                        let _ = reply.send(names);
+                    }
+                    UiEvent::WindowToDisplay { monitor, reply } => {
+                        let result = window_weak
+                            .upgrade()
+                            .ok_or_else(|| "No window".to_string())
+                            .and_then(|win| place_window_on_monitor(&win, &monitor));
+                        let _ = reply.send(result);
+                    }
                     UiEvent::ReloadConfig => {
                         if let Some(app) = state.ghostty_app.borrow_mut().as_mut() {
                             app.reload_config();
@@ -852,6 +863,68 @@ pub(super) fn mark_workspace_read(state: &Rc<AppState>, workspace_id: uuid::Uuid
         workspace.mark_notifications_read();
         workspace.clear_attention();
     }
+}
+
+/// Names (connector ids) of the connected monitors, e.g. ["DP-1", "HDMI-1"].
+fn list_monitor_names() -> Vec<String> {
+    let Some(display) = gtk4::gdk::Display::default() else {
+        return Vec::new();
+    };
+    let monitors = display.monitors();
+    let mut names = Vec::new();
+    for i in 0..monitors.n_items() {
+        if let Some(m) = monitors
+            .item(i)
+            .and_then(|o| o.downcast::<gtk4::gdk::Monitor>().ok())
+        {
+            let name = m
+                .connector()
+                .map(|s| s.to_string())
+                .filter(|s| !s.is_empty())
+                .or_else(|| m.model().map(|s| s.to_string()))
+                .unwrap_or_else(|| format!("monitor-{i}"));
+            names.push(name);
+        }
+    }
+    names
+}
+
+/// Place a window on a monitor identified by connector name or 0-based index.
+///
+/// Wayland forbids positioning a normal top-level window, so we fullscreen on
+/// the target monitor — the closest portable equivalent. Returns the matched
+/// monitor's label.
+fn place_window_on_monitor(
+    window: &adw::ApplicationWindow,
+    target: &str,
+) -> Result<String, String> {
+    let Some(display) = gtk4::gdk::Display::default() else {
+        return Err("No default display".to_string());
+    };
+    let monitors = display.monitors();
+    let idx_target = target.parse::<u32>().ok();
+    for i in 0..monitors.n_items() {
+        let Some(m) = monitors
+            .item(i)
+            .and_then(|o| o.downcast::<gtk4::gdk::Monitor>().ok())
+        else {
+            continue;
+        };
+        let name = m.connector().map(|s| s.to_string()).unwrap_or_default();
+        if name.eq_ignore_ascii_case(target) || idx_target == Some(i) {
+            window.fullscreen_on_monitor(&m);
+            let label = if name.is_empty() {
+                format!("monitor-{i}")
+            } else {
+                name
+            };
+            return Ok(label);
+        }
+    }
+    Err(format!(
+        "No monitor matching '{target}' (available: {})",
+        list_monitor_names().join(", ")
+    ))
 }
 
 /// The maximum level of UI refresh a `UiEvent` can require.

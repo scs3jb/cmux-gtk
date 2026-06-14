@@ -327,6 +327,8 @@ SSH
 Windows
   windows                    List windows
   new-window                 Open a new window
+  window displays            List connected monitors
+  window display <name|idx>  Move the window to a monitor (fullscreens it)
 
 Misc
   status / progress / log    Update sidebar metadata for the current workspace
@@ -366,6 +368,14 @@ case "$command" in
     ;;
   new-window)
     _cmux_send "new_window"
+    ;;
+  window)
+    sub="${1:-}"; shift || true
+    case "$sub" in
+      displays) _cmux_json "window.displays" "{}" ;;
+      display)  _cmux_json "window.display" "{\"monitor\":\"${1:-}\"}" ;;
+      *) echo "usage: cmux window {displays|display <name|index>}" >&2 ;;
+    esac
     ;;
 
   # ── SSH ──

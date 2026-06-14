@@ -313,6 +313,18 @@ pub enum UiEvent {
     },
     /// Create a new application window.
     CreateWindow,
+    /// List connected monitors (names), replying with their connector names.
+    ListDisplays {
+        reply: tokio::sync::oneshot::Sender<Vec<String>>,
+    },
+    /// Place the focused window on a named (or 0-based index) monitor. Wayland
+    /// disallows positioning a normal window, so this fullscreens on the target
+    /// monitor — the closest portable behavior. Replies with the matched
+    /// monitor name, or an error.
+    WindowToDisplay {
+        monitor: String,
+        reply: tokio::sync::oneshot::Sender<Result<String, String>>,
+    },
     /// Reload ghostty configuration from disk.
     ReloadConfig,
     /// Re-apply the app theme from settings (adw color scheme + ghostty color scheme).

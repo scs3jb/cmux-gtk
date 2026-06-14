@@ -13,6 +13,39 @@ pub(super) fn handle_window_new(id: Value, state: &Arc<SharedState>) -> Response
     Response::success(id, serde_json::json!({"created": true}))
 }
 
+pub(super) fn handle_window_displays(id: Value, state: &Arc<SharedState>) -> Response {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    if !state.send_ui_event(UiEvent::ListDisplays { reply: tx }) {
+        return Response::error(id, "no_window", "No window to query displays from");
+    }
+    match rx.blocking_recv() {
+        Ok(names) => Response::success(id, serde_json::json!({"displays": names})),
+        Err(_) => Response::error(id, "internal", "GTK thread did not reply"),
+    }
+}
+
+pub(super) fn handle_window_display(
+    id: Value,
+    params: &Value,
+    state: &Arc<SharedState>,
+) -> Response {
+    let Some(monitor) = params.get("monitor").and_then(|v| v.as_str()) else {
+        return Response::error(id, "invalid_params", "Provide 'monitor' (name or index)");
+    };
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    if !state.send_ui_event(UiEvent::WindowToDisplay {
+        monitor: monitor.to_string(),
+        reply: tx,
+    }) {
+        return Response::error(id, "no_window", "No window to place");
+    }
+    match rx.blocking_recv() {
+        Ok(Ok(label)) => Response::success(id, serde_json::json!({"display": label})),
+        Ok(Err(e)) => Response::error(id, "not_found", &e),
+        Err(_) => Response::error(id, "internal", "GTK thread did not reply"),
+    }
+}
+
 pub(super) fn handle_window_list(id: Value, state: &Arc<SharedState>) -> Response {
     let wids = state.window_ids();
     let windows: Vec<Value> = wids

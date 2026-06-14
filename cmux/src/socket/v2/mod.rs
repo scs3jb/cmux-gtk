@@ -330,6 +330,8 @@ pub fn dispatch(json_line: &str, state: &Arc<SharedState>) -> Response {
         "window.current" => window::handle_window_current(id, state),
         "window.focus" => window::handle_window_focus(id, &req.params, state),
         "window.close" => window::handle_window_close(id, &req.params, state),
+        "window.displays" => window::handle_window_displays(id, state),
+        "window.display" => window::handle_window_display(id, &req.params, state),
 
         // Sidebar commands
         "sidebar.show" => sidebar::handle_sidebar_show(id, state),
