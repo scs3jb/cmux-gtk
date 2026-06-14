@@ -552,11 +552,13 @@ fn build_tab_button(
     }
     tab.add_controller(drag_source);
 
-    // Drop target for reordering
+    // Drop target — reorder within the same pane, or move the tab into this
+    // pane when it comes from a different pane.
     let drop_target = gtk4::DropTarget::new(glib::Type::STRING, gdk4::DragAction::MOVE);
     {
         let state = Rc::clone(state);
         let target_index = tab_index;
+        let target_panel_id = panel_id;
         drop_target.connect_drop(move |_target, value, _x, _y| {
             let Ok(data) = value.get::<String>() else {
                 return false;
@@ -568,11 +570,23 @@ fn build_tab_button(
             let Ok(source_panel_id) = uuid::Uuid::parse_str(parts[1]) else {
                 return false;
             };
+            if source_panel_id == target_panel_id {
+                return false;
+            }
 
             let mut tm = lock_or_recover(&state.shared.tab_manager);
             if let Some(ws) = tm.find_workspace_with_panel_mut(source_panel_id) {
-                ws.layout
-                    .reorder_panel_in_pane(source_panel_id, target_index);
+                let same_pane = ws
+                    .layout
+                    .find_pane_with_panel_readonly(target_panel_id)
+                    .map(|ids| ids.contains(&source_panel_id))
+                    .unwrap_or(false);
+                if same_pane {
+                    ws.layout
+                        .reorder_panel_in_pane(source_panel_id, target_index);
+                } else {
+                    ws.move_panel_to_pane(source_panel_id, target_panel_id);
+                }
             }
             drop(tm);
             state.shared.notify_ui_refresh();

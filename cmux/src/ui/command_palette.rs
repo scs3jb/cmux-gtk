@@ -211,6 +211,7 @@ fn build_actions(state: &Rc<AppState>) -> Rc<Vec<PaletteAction>> {
 
     let mut actions = vec![
         cmd("workspace.new", "New Workspace"),
+        cmd("workspace.reopen_closed", "Reopen Closed Workspace"),
         cmd("workspace.new_browser", "New Browser Workspace"),
         cmd("workspace.new_diff", "New Diff Workspace"),
         cmd("workspace.new_project", "New Project Visualizer"),
@@ -521,6 +522,9 @@ fn execute_action(name: &str, state: &Rc<AppState>, on_refresh: &Rc<dyn Fn()>) {
     match name {
         "workspace.new" => {
             lock_or_recover(&state.shared.tab_manager).add_workspace(Workspace::new());
+        }
+        "workspace.reopen_closed" => {
+            lock_or_recover(&state.shared.tab_manager).reopen_last_closed();
         }
         "workspace.new_browser" => {
             let mut ws = Workspace::new();

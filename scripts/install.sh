@@ -62,6 +62,14 @@ if [[ -d "$REPO_ROOT/cmux/icons/scalable" ]]; then
   done < <(find "$REPO_ROOT/cmux/icons/scalable" -name '*.svg' -print0)
 fi
 
+# Application icon(s) into the hicolor theme (matches the desktop Icon=).
+if [[ -d "$REPO_ROOT/data/icons/hicolor" ]]; then
+  while IFS= read -r -d '' svg; do
+    rel="${svg#"$REPO_ROOT"/data/icons/hicolor/}"
+    install -Dm644 "$svg" "$PREFIX/share/icons/hicolor/$rel"
+  done < <(find "$REPO_ROOT/data/icons/hicolor" -name '*.svg' -print0)
+fi
+
 # Refresh caches (best-effort).
 command -v update-desktop-database >/dev/null 2>&1 && \
   update-desktop-database "$PREFIX/share/applications" 2>/dev/null || true

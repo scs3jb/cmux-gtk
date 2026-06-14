@@ -572,6 +572,8 @@ pub fn run() -> i32 {
         let shared_for_socket = shared.clone();
         let shared_for_ports = shared.clone();
         app.connect_startup(move |_app| {
+            // Use the bundled app icon for windows / alt-tab / taskbar.
+            gtk4::Window::set_default_icon_name("io.github.douglas.cmux_gtk");
             let shared = shared_for_socket.clone();
             std::thread::spawn(move || {
                 let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");

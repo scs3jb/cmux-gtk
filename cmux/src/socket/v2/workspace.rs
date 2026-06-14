@@ -595,6 +595,24 @@ pub(super) fn handle_workspace_focus_forward(id: Value, state: &Arc<SharedState>
 }
 
 // -----------------------------------------------------------------------
+// workspace.reopen_closed
+// -----------------------------------------------------------------------
+
+pub(super) fn handle_workspace_reopen_closed(id: Value, state: &Arc<SharedState>) -> Response {
+    let reopened = {
+        let mut tm = lock_or_recover(&state.tab_manager);
+        tm.reopen_last_closed()
+    };
+    match reopened {
+        Some(ws_id) => {
+            state.notify_ui_refresh();
+            Response::success(id, serde_json::json!({"workspace_id": ws_id.to_string()}))
+        }
+        None => Response::error(id, "empty", "No recently closed workspace to reopen"),
+    }
+}
+
+// -----------------------------------------------------------------------
 // workspace.hibernate / workspace.wake
 // -----------------------------------------------------------------------
 

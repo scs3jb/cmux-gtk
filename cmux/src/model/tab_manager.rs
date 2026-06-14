@@ -18,7 +18,12 @@ pub struct TabManager {
     focus_history: Vec<Uuid>,
     /// Current position within `focus_history`.
     focus_pos: usize,
+    /// Recently-closed workspaces (most recent last) for reopen.
+    closed_stack: Vec<Workspace>,
 }
+
+/// Maximum number of recently-closed workspaces retained for reopen.
+const CLOSED_STACK_CAP: usize = 10;
 
 /// Maximum number of entries retained in the focus history.
 const FOCUS_HISTORY_CAP: usize = 50;
@@ -33,6 +38,7 @@ impl TabManager {
             groups: Vec::new(),
             focus_history: Vec::new(),
             focus_pos: 0,
+            closed_stack: Vec::new(),
         }
     }
 
@@ -44,6 +50,7 @@ impl TabManager {
             groups: Vec::new(),
             focus_history: Vec::new(),
             focus_pos: 0,
+            closed_stack: Vec::new(),
         }
     }
 
@@ -189,6 +196,15 @@ impl TabManager {
             return None;
         }
         let ws = self.workspaces.remove(index);
+
+        // Record for reopen — skip empty workspaces (e.g. an emptied move source).
+        if !ws.panels.is_empty() {
+            self.closed_stack.push(ws.clone());
+            if self.closed_stack.len() > CLOSED_STACK_CAP {
+                let drop = self.closed_stack.len() - CLOSED_STACK_CAP;
+                self.closed_stack.drain(0..drop);
+            }
+        }
 
         // Adjust selection
         if self.workspaces.is_empty() {
@@ -607,6 +623,20 @@ impl TabManager {
         self.focus_pos = self.focus_history.len() - 1;
     }
 
+    /// Reopen the most recently closed workspace (restoring its layout, panels,
+    /// and directory; terminals get fresh shells). Returns the workspace ID, or
+    /// `None` if nothing was closed.
+    pub fn reopen_last_closed(&mut self) -> Option<Uuid> {
+        let ws = self.closed_stack.pop()?;
+        let id = ws.id;
+        // Avoid a duplicate if somehow still present.
+        if self.workspace(id).is_some() {
+            return Some(id);
+        }
+        self.add_workspace(ws);
+        Some(id)
+    }
+
     /// Move one step back in focus history and select that workspace.
     /// Returns the now-selected workspace ID, or `None` if there is no earlier
     /// entry (or it no longer exists).
@@ -903,6 +933,27 @@ mod tests {
         assert_eq!(tm.set_group_collapsed(gid, Some(true)), Some(true));
         assert!(tm.set_group_color(gid, Some("blue".into())));
         assert_eq!(tm.group(gid).unwrap().color.as_deref(), Some("blue"));
+    }
+
+    #[test]
+    fn test_reopen_last_closed() {
+        let mut tm = TabManager::empty();
+        let a = tm.add_workspace(Workspace::new());
+        let b = tm.add_workspace(Workspace::new());
+        assert_eq!(tm.len(), 2);
+        // Close `a` (index 0).
+        let idx = tm.workspace_index(a).unwrap();
+        tm.remove(idx);
+        assert_eq!(tm.len(), 1);
+        assert!(tm.workspace(a).is_none());
+        // Reopen restores it with the same id.
+        let reopened = tm.reopen_last_closed();
+        assert_eq!(reopened, Some(a));
+        assert!(tm.workspace(a).is_some());
+        assert_eq!(tm.len(), 2);
+        // Nothing more to reopen (b is still open).
+        let _ = b;
+        assert_eq!(tm.reopen_last_closed(), None);
     }
 
     #[test]

@@ -294,6 +294,35 @@ impl Workspace {
         Some(panel)
     }
 
+    /// Move a panel (tab) into the pane that currently contains
+    /// `target_panel_id`, within this workspace. Layout-only — the panel stays
+    /// in the panels map. Returns true on success; false if already in the same
+    /// pane or either panel is missing.
+    pub fn move_panel_to_pane(&mut self, source_panel_id: Uuid, target_panel_id: Uuid) -> bool {
+        if source_panel_id == target_panel_id {
+            return false;
+        }
+        if !self.panels.contains_key(&source_panel_id)
+            || !self.panels.contains_key(&target_panel_id)
+        {
+            return false;
+        }
+        // No-op if they already share a pane (the caller handles reordering).
+        if let Some(ids) = self.layout.find_pane_with_panel_readonly(target_panel_id) {
+            if ids.contains(&source_panel_id) {
+                return false;
+            }
+        }
+        self.layout.remove_panel(source_panel_id);
+        if self.layout.add_panel_to_pane(target_panel_id, source_panel_id) {
+            self.previous_focused_panel_id = self.focused_panel_id;
+            self.focused_panel_id = Some(source_panel_id);
+            true
+        } else {
+            false
+        }
+    }
+
     /// Insert a panel into the workspace by splitting the focused pane.
     /// Returns true if the panel was inserted successfully.
     pub fn insert_panel(&mut self, panel: Panel, orientation: SplitOrientation) -> bool {
@@ -696,6 +725,28 @@ mod tests {
                 .and_then(|panel| panel.directory.as_deref()),
             None
         );
+    }
+
+    #[test]
+    fn test_move_panel_between_panes() {
+        let mut ws = Workspace::new();
+        let a = ws.focused_panel_id.unwrap();
+        // Split into two panes: a | b.
+        let b = ws.split(SplitOrientation::Horizontal, PanelType::Terminal);
+        // a and b are in separate panes.
+        assert!(!ws
+            .layout
+            .find_pane_with_panel_readonly(b)
+            .unwrap()
+            .contains(&a));
+        // Move a into b's pane.
+        assert!(ws.move_panel_to_pane(a, b));
+        let pane = ws.layout.find_pane_with_panel_readonly(b).unwrap();
+        assert!(pane.contains(&a) && pane.contains(&b));
+        assert_eq!(ws.focused_panel_id, Some(a));
+        assert_eq!(ws.panels.len(), 2);
+        // Same-pane move is a no-op.
+        assert!(!ws.move_panel_to_pane(a, b));
     }
 
     #[test]

@@ -55,6 +55,8 @@ cargo build --release --no-default-features --features cmux/link-ghostty
 - **Omarchy themes** — colors.toml parsing with SIGUSR2 live reload
 - **tmux compatibility** — CLI shim maps tmux commands (split-window, send-keys, capture-pane, etc.) to cmux socket API for tool compatibility
 - **Theme browser** — `cmux themes [filter]` lists bundled ghostty themes from system and user directories
+- **Move tabs** — drag a tab onto another pane to move it between panes, or onto a sidebar workspace row to move it to another workspace
+- **Reopen closed workspace** — `cmux reopen` / command palette restores the most recently closed workspace (layout + cwd, fresh shells)
 - **Multi-window** — workspaces assignable across windows
 - **Display placement** — `cmux window displays` lists monitors; `cmux window display <name|index>` moves the window to a monitor (fullscreens it — Wayland forbids windowed repositioning)
 - **Focus history** — back/forward navigation through recently-focused workspaces (`cmux back`/`cmux forward`, command palette, `workspace.focus_back/forward` socket)

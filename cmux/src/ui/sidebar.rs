@@ -327,6 +327,24 @@ fn setup_row_drag_drop(row: &gtk4::ListBoxRow, index: usize, state: &Rc<AppState
                 }
                 return moved;
             }
+            // A tab drag carries "<index>/<panel_uuid>" — move that panel into
+            // the workspace under the drop.
+            if let Some(panel_id) = source_str
+                .split_once('/')
+                .and_then(|(_, id)| uuid::Uuid::parse_str(id).ok())
+            {
+                let Some(target_ws_id) = tm.get(target_index).map(|w| w.id) else {
+                    return false;
+                };
+                let moved = tm
+                    .move_panel_to_workspace(panel_id, target_ws_id)
+                    .is_some();
+                drop(tm);
+                if moved {
+                    state.shared.notify_ui_refresh();
+                }
+                return moved;
+            }
             let Ok(source_index) = source_str.parse::<usize>() else {
                 return false;
             };

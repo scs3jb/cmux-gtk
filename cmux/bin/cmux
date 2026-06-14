@@ -295,6 +295,7 @@ Workspaces
   current                    Show the current workspace
   rename <name>              Rename the current workspace
   close [id]                 Close a workspace
+  reopen                     Reopen the most recently closed workspace
   next | prev | last         Switch workspace
   back | forward             Navigate recently-focused workspaces
   hibernate                  Pause the focused agent (SIGSTOP) / toggle
@@ -479,6 +480,9 @@ case "$command" in
     ;;
   last)
     _cmux_send "last"
+    ;;
+  reopen)
+    _cmux_send "reopen"
     ;;
   back)
     _cmux_send "focus_back"
