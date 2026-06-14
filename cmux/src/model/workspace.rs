@@ -323,6 +323,38 @@ impl Workspace {
         }
     }
 
+    /// Split the pane containing `target_panel_id`, moving `source_panel_id`
+    /// into a new adjacent pane on the given side (within this workspace).
+    /// Layout-only. Returns true on success.
+    pub fn split_panel_into_pane(
+        &mut self,
+        source_panel_id: Uuid,
+        target_panel_id: Uuid,
+        orientation: SplitOrientation,
+        direction: super::panel::Direction,
+    ) -> bool {
+        if source_panel_id == target_panel_id {
+            return false;
+        }
+        if !self.panels.contains_key(&source_panel_id)
+            || !self.panels.contains_key(&target_panel_id)
+        {
+            return false;
+        }
+        // Detach source from its current pane (keeps it in the panels map).
+        self.layout.remove_panel(source_panel_id);
+        if self
+            .layout
+            .split_pane_with_panel(target_panel_id, source_panel_id, orientation, direction)
+        {
+            self.previous_focused_panel_id = self.focused_panel_id;
+            self.focused_panel_id = Some(source_panel_id);
+            true
+        } else {
+            false
+        }
+    }
+
     /// Insert a panel into the workspace by splitting the focused pane.
     /// Returns true if the panel was inserted successfully.
     pub fn insert_panel(&mut self, panel: Panel, orientation: SplitOrientation) -> bool {
@@ -747,6 +779,34 @@ mod tests {
         assert_eq!(ws.panels.len(), 2);
         // Same-pane move is a no-op.
         assert!(!ws.move_panel_to_pane(a, b));
+    }
+
+    #[test]
+    fn test_split_panel_into_pane() {
+        use super::super::panel::Direction;
+        let mut ws = Workspace::new();
+        let a = ws.focused_panel_id.unwrap();
+        // Add b as a tab in a's pane (single pane, two tabs).
+        let b = Panel::new_terminal();
+        let b_id = b.id;
+        ws.panels.insert(b_id, b);
+        ws.layout.add_panel_to_pane(a, b_id);
+        // Same pane to start.
+        assert!(ws
+            .layout
+            .find_pane_with_panel_readonly(a)
+            .unwrap()
+            .contains(&b_id));
+        // Drag b to the right edge of a's pane → split off into a new pane.
+        assert!(ws.split_panel_into_pane(b_id, a, SplitOrientation::Horizontal, Direction::Right));
+        // Now a and b are in separate panes.
+        assert!(!ws
+            .layout
+            .find_pane_with_panel_readonly(a)
+            .unwrap()
+            .contains(&b_id));
+        assert_eq!(ws.focused_panel_id, Some(b_id));
+        assert_eq!(ws.panels.len(), 2);
     }
 
     #[test]

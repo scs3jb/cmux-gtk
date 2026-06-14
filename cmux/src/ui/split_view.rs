@@ -9,7 +9,7 @@ use gtk4::prelude::*;
 use uuid::Uuid;
 
 use crate::app::{lock_or_recover, AppState};
-use crate::model::panel::{LayoutNode, Panel, PanelType, SplitOrientation};
+use crate::model::panel::{Direction, LayoutNode, Panel, PanelType, SplitOrientation};
 use crate::ui::terminal_panel;
 
 /// Build a zoomed view — renders only a single panel full-size.
@@ -270,6 +270,62 @@ fn build_pane(
                 vbox.set_opacity(opacity.clamp(0.15, 1.0));
             }
         }
+    }
+
+    // Drop target over the whole pane body: dropping a tab near an edge splits
+    // the pane (right/left → horizontal, bottom/top → vertical); dropping in the
+    // center moves the tab into this pane. Tab-bar tabs keep their own drop
+    // targets (reorder / move), so this only fires over the terminal area.
+    {
+        let state = Rc::clone(state);
+        let pane_panels: Vec<Uuid> = panel_ids.to_vec();
+        let vbox_weak = vbox.downgrade();
+        let drop_target = gtk4::DropTarget::new(glib::Type::STRING, gdk4::DragAction::MOVE);
+        drop_target.connect_drop(move |_t, value, x, y| {
+            let Ok(data) = value.get::<String>() else {
+                return false;
+            };
+            // Only tab payloads ("<index>/<uuid>") apply here.
+            let Some(source) = data
+                .split_once('/')
+                .and_then(|(_, id)| Uuid::parse_str(id).ok())
+            else {
+                return false;
+            };
+            let Some(vbox) = vbox_weak.upgrade() else {
+                return false;
+            };
+            let (w, h) = (vbox.width() as f64, vbox.height() as f64);
+            if w <= 0.0 || h <= 0.0 {
+                return false;
+            }
+            // A representative panel of this pane that isn't the dragged one.
+            let Some(target) = pane_panels.iter().copied().find(|&p| p != source) else {
+                return false;
+            };
+            let (fx, fy) = (x / w, y / h);
+            let mut tm = lock_or_recover(&state.shared.tab_manager);
+            let Some(ws) = tm.find_workspace_with_panel_mut(target) else {
+                return false;
+            };
+            let did = if fx > 0.66 {
+                ws.split_panel_into_pane(source, target, SplitOrientation::Horizontal, Direction::Right)
+            } else if fx < 0.34 {
+                ws.split_panel_into_pane(source, target, SplitOrientation::Horizontal, Direction::Left)
+            } else if fy > 0.66 {
+                ws.split_panel_into_pane(source, target, SplitOrientation::Vertical, Direction::Down)
+            } else if fy < 0.34 {
+                ws.split_panel_into_pane(source, target, SplitOrientation::Vertical, Direction::Up)
+            } else {
+                ws.move_panel_to_pane(source, target)
+            };
+            drop(tm);
+            if did {
+                state.shared.notify_ui_refresh();
+            }
+            did
+        });
+        vbox.add_controller(drop_target);
     }
 
     vbox.upcast()
