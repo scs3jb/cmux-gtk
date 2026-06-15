@@ -1659,7 +1659,9 @@ impl ghostty_gtk::callbacks::GhosttyCallbackHandler for CmuxCallbackHandler {
                 {
                     let mut tm = lock_or_recover(&self.shared.tab_manager);
                     if let Some(ws) = tm.selected_mut() {
-                        let panel = crate::model::panel::Panel::new_terminal();
+                        let mut panel = crate::model::panel::Panel::new_terminal();
+                        // Inherit the focused terminal's working directory.
+                        panel.directory = ws.inherited_terminal_directory();
                         let new_id = panel.id;
                         ws.panels.insert(new_id, panel);
                         let target = ws

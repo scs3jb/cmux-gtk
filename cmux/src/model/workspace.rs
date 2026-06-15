@@ -213,6 +213,19 @@ impl Workspace {
         self.custom_title.as_deref().unwrap_or(&self.process_title)
     }
 
+    /// Working directory a newly-opened terminal should inherit: the focused
+    /// panel's last-reported cwd, falling back to the workspace directory.
+    /// Returns `None` only if neither is known (terminal starts in $HOME).
+    pub fn inherited_terminal_directory(&self) -> Option<String> {
+        self.focused_panel_id
+            .and_then(|fid| self.panels.get(&fid))
+            .and_then(|p| p.directory.clone())
+            .filter(|d| !d.is_empty())
+            .or_else(|| {
+                Some(self.current_directory.clone()).filter(|d| !d.is_empty())
+            })
+    }
+
     /// Add a new panel by splitting the focused pane.
     pub fn split(&mut self, orientation: SplitOrientation, panel_type: PanelType) -> Uuid {
         let new_panel = match panel_type {
