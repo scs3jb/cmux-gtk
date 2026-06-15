@@ -581,9 +581,13 @@ impl SharedState {
 
 /// Run the GTK application. Returns the exit code.
 pub fn run() -> i32 {
+    // Single-instance: the first process registers on the session bus and owns
+    // the CLI socket; a second `cmux-app` launch is forwarded here (activate →
+    // new window, open → route the cmux:// URI into the running instance)
+    // instead of starting a rival process that can't bind the socket.
     let app = adw::Application::builder()
         .application_id("io.github.douglas.cmux_gtk")
-        .flags(gio::ApplicationFlags::NON_UNIQUE | gio::ApplicationFlags::HANDLES_OPEN)
+        .flags(gio::ApplicationFlags::HANDLES_OPEN)
         .build();
 
     let shared = Arc::new(SharedState::new());
@@ -609,18 +613,35 @@ pub fn run() -> i32 {
         });
     }
 
+    // One-time heavy init (ghostty, session restore, first windows) runs once
+    // per process. `activate` fires on launch and on every subsequent launch
+    // forwarded from a second `cmux-app`; the first does init, the rest open a
+    // new window.
+    let initialized = Rc::new(std::cell::Cell::new(false));
+
     let state_clone = state.clone();
+    let init_flag = initialized.clone();
     app.connect_activate(move |app| {
-        activate(app, &state_clone);
+        if init_flag.replace(true) {
+            // Already running — a re-launch: open a fresh window.
+            open_window(app, &state_clone, Uuid::new_v4());
+        } else {
+            first_launch_init(app, &state_clone);
+        }
     });
 
     // Handle cmux:// deep links opened via xdg-open / D-Bus.
     // The .desktop file declares MimeType=x-scheme-handler/cmux so xdg-open
-    // routes cmux:// URIs here.  Since the app is NON_UNIQUE every open call
-    // lands in a fresh process; activate() runs first, then open() is called.
+    // routes cmux:// URIs here. With a single instance, `open` is forwarded to
+    // the running process and routed into a current window. If the very first
+    // launch is via a URI (no prior activate), initialize first.
     {
         let state_clone = state.clone();
-        app.connect_open(move |_app, files, _hint| {
+        let init_flag = initialized.clone();
+        app.connect_open(move |app, files, _hint| {
+            if !init_flag.replace(true) {
+                first_launch_init(app, &state_clone);
+            }
             for file in files {
                 let uri = file.uri();
                 let uri_str = uri.as_str();
@@ -663,12 +684,9 @@ pub fn run() -> i32 {
     app.run().into()
 }
 
-fn activate(app: &adw::Application, state: &Rc<AppState>) {
-    if let Some(window) = app.active_window() {
-        window.present();
-        return;
-    }
-
+/// One-time per-process initialization: ghostty, theme, session restore, and
+/// the first window(s). Runs on the first `activate`/`open` only.
+fn first_launch_init(app: &adw::Application, state: &Rc<AppState>) {
     // Remove socket password from environment so child terminal processes
     // cannot read it. The password is already cached by socket_password().
     std::env::remove_var("CMUX_SOCKET_PASSWORD");
