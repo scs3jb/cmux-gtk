@@ -264,6 +264,8 @@ pub(super) fn handle_capabilities(id: Value) -> Response {
         "system.task_manager",
         "workspace.list",
         "workspace.new",
+        "workspace.open_history",
+        "workspace.open_vault",
         "workspace.create",
         "workspace.create_ssh",
         "workspace.remote.status",

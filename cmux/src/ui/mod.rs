@@ -7,9 +7,11 @@ pub mod browser_panel;
 pub mod command_palette;
 pub mod diff_panel;
 pub mod file_preview_panel;
+pub mod history_panel;
 #[cfg(feature = "webkit")]
 pub mod markdown_panel;
 pub mod notes_panel;
+pub mod vault_panel;
 pub mod notifications_panel;
 pub mod omnibar;
 pub mod project_panel;

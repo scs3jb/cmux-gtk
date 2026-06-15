@@ -377,6 +377,8 @@ fn build_tab_button(
             PanelType::Project => "view-list-symbolic",
             PanelType::FilePreview => "text-x-generic-symbolic",
             PanelType::Notes => "accessories-text-editor-symbolic",
+            PanelType::History => "document-open-recent-symbolic",
+            PanelType::Vault => "drive-multidisk-symbolic",
             _ => "globe-symbolic",
         };
         let img = gtk4::Image::from_icon_name(icon_name);

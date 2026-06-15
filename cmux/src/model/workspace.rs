@@ -223,6 +223,8 @@ impl Workspace {
             PanelType::Project => Panel::new_project(None),
             PanelType::FilePreview => Panel::new_file_preview(""),
             PanelType::Notes => Panel::new_notes(""),
+            PanelType::History => Panel::new_history(),
+            PanelType::Vault => Panel::new_vault(),
         };
         let new_id = new_panel.id;
         self.panels.insert(new_id, new_panel);

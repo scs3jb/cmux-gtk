@@ -359,6 +359,8 @@ Workspaces
   rename <name>              Rename the current workspace
   close [id]                 Close a workspace
   reopen                     Reopen the most recently closed workspace
+  history                    Open the History pane (closed/focused workspaces)
+  vault                      Open the Vault pane (search & resume agent sessions)
   next | prev | last         Switch workspace
   back | forward             Navigate recently-focused workspaces
   hibernate                  Pause the focused agent (SIGSTOP) / toggle
@@ -608,6 +610,8 @@ case "$command" in
   reopen)
     _cmux_act "reopen"
     ;;
+  history) _cmux_json "workspace.open_history" "{}" ;;
+  vault) _cmux_json "workspace.open_vault" "{}" ;;
   back)
     _cmux_act "focus_back"
     ;;

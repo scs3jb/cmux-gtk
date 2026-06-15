@@ -1,9 +1,21 @@
 //! TabManager — manages the collection of workspaces.
 
+use std::time::SystemTime;
+
 use uuid::Uuid;
 
 use super::workspace::Workspace;
 use super::workspace_group::WorkspaceGroup;
+
+/// A recently-closed workspace, retained for the History pane and reopen.
+#[derive(Debug, Clone)]
+pub struct ClosedEntry {
+    pub workspace: Workspace,
+    /// Wall-clock time the workspace was closed.
+    pub closed_at: SystemTime,
+    /// Display name captured at close time.
+    pub title: String,
+}
 
 /// Manages all workspaces and tracks the currently selected one.
 ///
@@ -18,8 +30,8 @@ pub struct TabManager {
     focus_history: Vec<Uuid>,
     /// Current position within `focus_history`.
     focus_pos: usize,
-    /// Recently-closed workspaces (most recent last) for reopen.
-    closed_stack: Vec<Workspace>,
+    /// Recently-closed workspaces (most recent last) for reopen + History.
+    closed_stack: Vec<ClosedEntry>,
 }
 
 /// Maximum number of recently-closed workspaces retained for reopen.
@@ -199,7 +211,11 @@ impl TabManager {
 
         // Record for reopen — skip empty workspaces (e.g. an emptied move source).
         if !ws.panels.is_empty() {
-            self.closed_stack.push(ws.clone());
+            self.closed_stack.push(ClosedEntry {
+                title: ws.display_title().to_string(),
+                closed_at: SystemTime::now(),
+                workspace: ws.clone(),
+            });
             if self.closed_stack.len() > CLOSED_STACK_CAP {
                 let drop = self.closed_stack.len() - CLOSED_STACK_CAP;
                 self.closed_stack.drain(0..drop);
@@ -627,7 +643,8 @@ impl TabManager {
     /// and directory; terminals get fresh shells). Returns the workspace ID, or
     /// `None` if nothing was closed.
     pub fn reopen_last_closed(&mut self) -> Option<Uuid> {
-        let ws = self.closed_stack.pop()?;
+        let entry = self.closed_stack.pop()?;
+        let ws = entry.workspace;
         let id = ws.id;
         // Avoid a duplicate if somehow still present.
         if self.workspace(id).is_some() {
@@ -635,6 +652,37 @@ impl TabManager {
         }
         self.add_workspace(ws);
         Some(id)
+    }
+
+    /// Recently-closed workspaces, most-recent last (for the History pane).
+    pub fn closed_entries(&self) -> &[ClosedEntry] {
+        &self.closed_stack
+    }
+
+    /// Reopen a specific closed workspace by ID (used by the History pane).
+    /// Returns the reopened workspace ID, or `None` if not found.
+    pub fn reopen_closed(&mut self, workspace_id: Uuid) -> Option<Uuid> {
+        let pos = self
+            .closed_stack
+            .iter()
+            .position(|e| e.workspace.id == workspace_id)?;
+        let entry = self.closed_stack.remove(pos);
+        let id = entry.workspace.id;
+        if self.workspace(id).is_some() {
+            return Some(id);
+        }
+        self.add_workspace(entry.workspace);
+        Some(id)
+    }
+
+    /// Clear the recently-closed list ("Clear Closed" in the History pane).
+    pub fn clear_closed(&mut self) {
+        self.closed_stack.clear();
+    }
+
+    /// Focus history (workspace IDs, oldest first) for the History pane.
+    pub fn focus_history(&self) -> &[Uuid] {
+        &self.focus_history
     }
 
     /// Move one step back in focus history and select that workspace.

@@ -919,6 +919,8 @@ fn restore_session(state: &Rc<AppState>) -> Vec<Uuid> {
                     "project" => crate::model::PanelType::Project,
                     "file_preview" => crate::model::PanelType::FilePreview,
                     "notes" => crate::model::PanelType::Notes,
+                    "history" => crate::model::PanelType::History,
+                    "vault" => crate::model::PanelType::Vault,
                     _ => crate::model::PanelType::Terminal,
                 };
                 let panel = crate::model::panel::Panel {

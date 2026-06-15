@@ -108,6 +108,8 @@ pub(super) fn handle_surface_current(id: Value, state: &Arc<SharedState>) -> Res
                 crate::model::PanelType::Project => "project",
                 crate::model::PanelType::FilePreview => "file_preview",
                 crate::model::PanelType::Notes => "notes",
+                crate::model::PanelType::History => "history",
+                crate::model::PanelType::Vault => "vault",
             }).unwrap_or("unknown"),
             "title": panel.map(|p| p.display_title()).unwrap_or("?"),
             "directory": panel.and_then(|p| p.directory.as_deref()),
@@ -578,6 +580,8 @@ pub(super) fn handle_surface_create(
         crate::model::PanelType::Project => crate::model::Panel::new_project(None),
         crate::model::PanelType::FilePreview => crate::model::Panel::new_file_preview(""),
         crate::model::PanelType::Notes => crate::model::Panel::new_notes(""),
+        crate::model::PanelType::History => crate::model::Panel::new_history(),
+        crate::model::PanelType::Vault => crate::model::Panel::new_vault(),
     };
     if panel_type == crate::model::PanelType::Browser {
         new_panel.browser_url = url;

@@ -635,6 +635,38 @@ pub(super) fn handle_workspace_focus_forward(id: Value, state: &Arc<SharedState>
 // workspace.reopen_closed
 // -----------------------------------------------------------------------
 
+/// `workspace.open_history` (`cmux history`) — open a History pane.
+pub(super) fn handle_workspace_open_history(id: Value, state: &Arc<SharedState>) -> Response {
+    open_side_panel(id, state, crate::model::Panel::new_history())
+}
+
+/// `workspace.open_vault` (`cmux vault`) — open a Vault pane.
+pub(super) fn handle_workspace_open_vault(id: Value, state: &Arc<SharedState>) -> Response {
+    open_side_panel(id, state, crate::model::Panel::new_vault())
+}
+
+/// Insert `panel` as a split beside the focused pane of the active workspace.
+fn open_side_panel(id: Value, state: &Arc<SharedState>, panel: crate::model::Panel) -> Response {
+    let panel_id = panel.id;
+    let opened = {
+        let mut tm = lock_or_recover(&state.tab_manager);
+        match tm.selected_mut() {
+            Some(ws) => {
+                ws.insert_panel(panel, crate::model::panel::SplitOrientation::Horizontal);
+                ws.focused_panel_id = Some(panel_id);
+                true
+            }
+            None => false,
+        }
+    };
+    if opened {
+        state.notify_ui_refresh();
+        Response::success(id, serde_json::json!({"panel_id": panel_id.to_string()}))
+    } else {
+        Response::error(id, "not_found", "No active workspace")
+    }
+}
+
 pub(super) fn handle_workspace_reopen_closed(id: Value, state: &Arc<SharedState>) -> Response {
     let reopened = {
         let mut tm = lock_or_recover(&state.tab_manager);

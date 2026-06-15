@@ -95,6 +95,14 @@ pub fn create_panel_widget(
             panel.markdown_file.as_deref(),
             is_attention_source,
         ),
+        // History pane — needs live state to list/reopen closed workspaces.
+        PanelType::History => {
+            super::history_panel::create_history_widget(panel.id, state, is_attention_source)
+        }
+        // Vault pane — scans agent session files; opens terminals to resume.
+        PanelType::Vault => {
+            super::vault_panel::create_vault_widget(panel.id, state, is_attention_source)
+        }
     }
 }
 

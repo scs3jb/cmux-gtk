@@ -23,6 +23,12 @@ pub enum PanelType {
     /// Editable notes / scratchpad. The `markdown_file` field holds the notes
     /// file path (auto-saved).
     Notes,
+    /// History pane — searchable, day-grouped list of recently closed and
+    /// focused workspaces, with reopen + "Clear Closed".
+    History,
+    /// Vault pane — searchable index of past agent sessions (Codex, Claude
+    /// Code, OpenCode) that can be reopened/resumed in a terminal.
+    Vault,
 }
 
 /// A panel within a workspace pane.
@@ -226,6 +232,50 @@ impl Panel {
         }
     }
 
+    /// Create a new History pane.
+    pub fn new_history() -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            panel_type: PanelType::History,
+            title: Some("History".to_string()),
+            custom_title: None,
+            directory: None,
+            is_pinned: false,
+            is_manually_unread: false,
+            git_branch: None,
+            listening_ports: Vec::new(),
+            tty_name: None,
+            browser_url: None,
+            markdown_file: None,
+            command: None,
+            pending_scrollback: None,
+            pending_zoom: None,
+            parent_panel_id: None,
+        }
+    }
+
+    /// Create a new Vault pane.
+    pub fn new_vault() -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            panel_type: PanelType::Vault,
+            title: Some("Vault".to_string()),
+            custom_title: None,
+            directory: None,
+            is_pinned: false,
+            is_manually_unread: false,
+            git_branch: None,
+            listening_ports: Vec::new(),
+            tty_name: None,
+            browser_url: None,
+            markdown_file: None,
+            command: None,
+            pending_scrollback: None,
+            pending_zoom: None,
+            parent_panel_id: None,
+        }
+    }
+
     /// Display title: custom title if set, otherwise process title, otherwise fallback by type.
     pub fn display_title(&self) -> &str {
         if let Some(ref t) = self.custom_title {
@@ -260,6 +310,8 @@ impl Panel {
                 "Preview"
             }
             PanelType::Notes => "Notes",
+            PanelType::History => "History",
+            PanelType::Vault => "Vault",
         }
     }
 }

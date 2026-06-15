@@ -216,6 +216,8 @@ fn build_actions(state: &Rc<AppState>) -> Rc<Vec<PaletteAction>> {
         cmd("workspace.new_diff", "New Diff Workspace"),
         cmd("workspace.new_project", "New Project Visualizer"),
         cmd("workspace.new_notes", "Open Notes Scratchpad"),
+        cmd("workspace.open_history", "Open History"),
+        cmd("workspace.open_vault", "Open Vault"),
         cmd("pane.split_horizontal", "Split Horizontal"),
         cmd("pane.split_vertical", "Split Vertical"),
         cmd("pane.close", "Close Pane"),
@@ -574,6 +576,18 @@ fn execute_action(name: &str, state: &Rc<AppState>, on_refresh: &Rc<dyn Fn()>) {
                     &crate::ui::notes_panel::default_notes_path(),
                 );
                 ws.insert_panel(panel, SplitOrientation::Horizontal);
+            }
+        }
+        "workspace.open_history" => {
+            let mut tm = lock_or_recover(&state.shared.tab_manager);
+            if let Some(ws) = tm.selected_mut() {
+                ws.insert_panel(crate::model::Panel::new_history(), SplitOrientation::Horizontal);
+            }
+        }
+        "workspace.open_vault" => {
+            let mut tm = lock_or_recover(&state.shared.tab_manager);
+            if let Some(ws) = tm.selected_mut() {
+                ws.insert_panel(crate::model::Panel::new_vault(), SplitOrientation::Horizontal);
             }
         }
         "pane.split_horizontal" => {

@@ -68,6 +68,10 @@ cargo build --release --no-default-features --features cmux/link-ghostty
 - **Project visualizer** — `cmux project [path]` opens a structure pane: bounded directory tree (skips .git/node_modules/target/…) plus a file-type/size summary; plain-GTK, no WebKit
 - **`cmux open <path-or-url>...`** — opens files in a viewer (markdown → markdown panel, else → file-preview panel), directories as new workspaces, and URLs in a browser split (`file.open` socket method)
 - **Notes scratchpad** — `cmux notes [file]` opens an editable, auto-saved notes panel
+- **Finder previews** — the file-preview panel renders images (`Picture`) and videos (`Video`) inline, not just text — ideal for reviewing screenshots and demo videos agents produce
+- **History pane** — `cmux history` opens a searchable, day-grouped list of recently closed workspaces (click to reopen, "Clear Closed") plus recently focused workspaces
+- **Vault pane** — `cmux vault` indexes past Claude Code / Codex sessions (`~/.claude/projects`, `~/.codex/sessions`) with title/dir/preview search; click a session to resume it in a terminal
+- **Task Manager** — `cmux top` opens the CPU/RAM monitor for agent/terminal processes (also Ctrl+Shift+A / command palette); `cmux ps` prints the same as JSON
 - **Diff sources** — `cmux diff --staged` / `--branch <ref>` select what the diff viewer shows; `cmux read --scrollback --lines N` reads terminal history
 - **Welcome screen** — first-launch getting-started tips
 
