@@ -808,6 +808,71 @@ fn cleanup_scrollback_temp_files() {
 /// Restore workspaces from a saved session. Returns window IDs for each restored window.
 ///
 /// Session restore can be disabled by setting `CMUX_DISABLE_SESSION_RESTORE=1`.
+/// Best working directory for a new tab opened from `ws`: the focused
+/// terminal's *live* cwd, read straight from `/proc`.
+///
+/// We locate the shell process by the `CMUX_PANEL_ID` env var cmux sets on
+/// every terminal — so this works even when shell-integration pwd reporting is
+/// inactive. Falls back to the last-reported directory, then the workspace dir.
+pub fn new_tab_directory(ws: &crate::model::Workspace) -> Option<String> {
+    if let Some(panel_id) = ws.focused_panel_id {
+        if let Some(cwd) = live_cwd_for_panel(panel_id).filter(|d| !d.is_empty()) {
+            return Some(cwd);
+        }
+    }
+    ws.inherited_terminal_directory()
+}
+
+/// Read the live cwd of the shell backing `panel_id` from `/proc`. Finds the
+/// process whose `CMUX_PANEL_ID` env var matches (preferring the shell — a
+/// direct child of this process) and returns `/proc/<pid>/cwd`.
+fn live_cwd_for_panel(panel_id: Uuid) -> Option<String> {
+    let needle = format!("CMUX_PANEL_ID={panel_id}");
+    let me = std::process::id();
+    let mut fallback: Option<(u32, std::path::PathBuf)> = None;
+    for entry in std::fs::read_dir("/proc").ok()?.flatten() {
+        let Ok(pid) = entry.file_name().to_string_lossy().parse::<u32>() else {
+            continue;
+        };
+        let proc_dir = entry.path();
+        // environ is NUL-separated KEY=VALUE; only readable for our own children.
+        let Ok(environ) = std::fs::read(proc_dir.join("environ")) else {
+            continue;
+        };
+        if !environ.split(|&b| b == 0).any(|kv| kv == needle.as_bytes()) {
+            continue;
+        }
+        // The shell is a direct child of the cmux process; its cwd tracks `cd`.
+        let ppid = std::fs::read_to_string(proc_dir.join("stat"))
+            .ok()
+            .and_then(|s| parse_ppid(&s));
+        if ppid == Some(me) {
+            return read_cwd(&proc_dir);
+        }
+        if fallback.as_ref().map(|(p, _)| pid < *p).unwrap_or(true) {
+            fallback = Some((pid, proc_dir));
+        }
+    }
+    fallback.and_then(|(_, dir)| read_cwd(&dir))
+}
+
+fn read_cwd(proc_dir: &std::path::Path) -> Option<String> {
+    std::fs::read_link(proc_dir.join("cwd"))
+        .ok()
+        .and_then(|p| p.to_str().map(String::from))
+}
+
+/// Parse the ppid (field 4) from a `/proc/<pid>/stat` line, skipping the
+/// `(comm)` field which may itself contain spaces or parens.
+fn parse_ppid(stat: &str) -> Option<u32> {
+    let after_comm = stat.rfind(')')?;
+    stat[after_comm + 1..]
+        .trim()
+        .split_ascii_whitespace()
+        .nth(1) // state, ppid
+        .and_then(|s| s.parse().ok())
+}
+
 /// Reconstruct a `Workspace` from its session snapshot (used for both live
 /// workspaces and the persisted closed-history entries).
 fn build_workspace_from_snapshot(
@@ -1661,7 +1726,7 @@ impl ghostty_gtk::callbacks::GhosttyCallbackHandler for CmuxCallbackHandler {
                     if let Some(ws) = tm.selected_mut() {
                         let mut panel = crate::model::panel::Panel::new_terminal();
                         // Inherit the focused terminal's working directory.
-                        panel.directory = ws.inherited_terminal_directory();
+                        panel.directory = new_tab_directory(ws);
                         let new_id = panel.id;
                         ws.panels.insert(new_id, panel);
                         let target = ws

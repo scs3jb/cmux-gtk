@@ -484,7 +484,7 @@ pub(super) fn setup_shortcuts(
                     if let Some(ws) = tm.selected_mut() {
                         let mut panel = crate::model::Panel::new_terminal();
                         // Inherit the focused terminal's working directory.
-                        panel.directory = ws.inherited_terminal_directory();
+                        panel.directory = crate::app::new_tab_directory(ws);
                         let new_id = panel.id;
                         ws.panels.insert(new_id, panel);
                         let target = ws
