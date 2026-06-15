@@ -680,6 +680,16 @@ impl TabManager {
         self.closed_stack.clear();
     }
 
+    /// Replace the recently-closed list (used when restoring a session).
+    /// Oldest entries are dropped if it exceeds the retention cap.
+    pub fn set_closed_entries(&mut self, mut entries: Vec<ClosedEntry>) {
+        if entries.len() > CLOSED_STACK_CAP {
+            let drop = entries.len() - CLOSED_STACK_CAP;
+            entries.drain(0..drop);
+        }
+        self.closed_stack = entries;
+    }
+
     /// Focus history (workspace IDs, oldest first) for the History pane.
     pub fn focus_history(&self) -> &[Uuid] {
         &self.focus_history

@@ -320,10 +320,27 @@ pub fn create_snapshot(state: &crate::app::AppState) -> AppSessionSnapshot {
         })
         .collect();
 
+    // Persist the recently-closed history (global) so the History pane and
+    // reopen survive restarts.
+    let closed_workspaces: Vec<crate::session::snapshot::SessionClosedEntrySnapshot> = tm
+        .closed_entries()
+        .iter()
+        .map(|entry| crate::session::snapshot::SessionClosedEntrySnapshot {
+            workspace: make_ws_snapshot(&entry.workspace),
+            closed_at_unix: entry
+                .closed_at
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0),
+            title: entry.title.clone(),
+        })
+        .collect();
+
     AppSessionSnapshot {
         version: 1,
         created_at: now,
         windows,
+        closed_workspaces,
     }
 }
 

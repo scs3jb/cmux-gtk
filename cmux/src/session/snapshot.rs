@@ -13,6 +13,19 @@ pub struct AppSessionSnapshot {
     pub version: u32,
     pub created_at: f64,
     pub windows: Vec<SessionWindowSnapshot>,
+    /// Recently-closed workspaces (global, for the History pane + reopen).
+    #[serde(default)]
+    pub closed_workspaces: Vec<SessionClosedEntrySnapshot>,
+}
+
+/// A persisted recently-closed workspace (History pane).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionClosedEntrySnapshot {
+    pub workspace: SessionWorkspaceSnapshot,
+    /// Unix seconds when the workspace was closed.
+    pub closed_at_unix: u64,
+    pub title: String,
 }
 
 /// Window snapshot (Linux has one window typically, but supports multiple).

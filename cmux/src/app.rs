@@ -808,6 +808,98 @@ fn cleanup_scrollback_temp_files() {
 /// Restore workspaces from a saved session. Returns window IDs for each restored window.
 ///
 /// Session restore can be disabled by setting `CMUX_DISABLE_SESSION_RESTORE=1`.
+/// Reconstruct a `Workspace` from its session snapshot (used for both live
+/// workspaces and the persisted closed-history entries).
+fn build_workspace_from_snapshot(
+    ws_snapshot: &session::snapshot::SessionWorkspaceSnapshot,
+    window_id: Option<Uuid>,
+    agent_restore_settings: &crate::settings::AgentRestoreSettings,
+) -> crate::model::Workspace {
+    let mut workspace = crate::model::Workspace::with_directory(&ws_snapshot.current_directory);
+    workspace.window_id = window_id;
+    workspace.custom_title = ws_snapshot.custom_title.clone();
+    workspace.custom_color = ws_snapshot.custom_color.clone();
+    workspace.is_pinned = ws_snapshot.is_pinned;
+    workspace.process_title = ws_snapshot.process_title.clone();
+    workspace.status_entries = ws_snapshot.status_entries.clone();
+    workspace.log_entries = ws_snapshot.log_entries.clone();
+    workspace.progress = ws_snapshot.progress.clone();
+    workspace.git_branch = ws_snapshot.git_branch.clone();
+    workspace.remote_config = ws_snapshot.remote_config.clone();
+    workspace.group_id = ws_snapshot.group_id;
+
+    let layout = ws_snapshot.layout.to_layout();
+    let mut panels = std::collections::HashMap::new();
+    for panel_snapshot in &ws_snapshot.panels {
+        let panel_type = match panel_snapshot.panel_type.as_str() {
+            #[cfg(feature = "webkit")]
+            "browser" => crate::model::PanelType::Browser,
+            #[cfg(feature = "webkit")]
+            "markdown" => crate::model::PanelType::Markdown,
+            #[cfg(not(feature = "webkit"))]
+            "browser" | "markdown" => continue, // skip browser panels when webkit disabled
+            "diff" => crate::model::PanelType::Diff,
+            "project" => crate::model::PanelType::Project,
+            "file_preview" => crate::model::PanelType::FilePreview,
+            "notes" => crate::model::PanelType::Notes,
+            "history" => crate::model::PanelType::History,
+            "vault" => crate::model::PanelType::Vault,
+            _ => crate::model::PanelType::Terminal,
+        };
+        let panel = crate::model::panel::Panel {
+            id: panel_snapshot.id,
+            panel_type,
+            title: panel_snapshot.title.clone(),
+            custom_title: panel_snapshot.custom_title.clone(),
+            directory: panel_snapshot.directory.clone(),
+            is_pinned: panel_snapshot.is_pinned,
+            is_manually_unread: panel_snapshot.is_manually_unread,
+            git_branch: panel_snapshot.git_branch.clone(),
+            listening_ports: panel_snapshot.listening_ports.clone(),
+            tty_name: panel_snapshot.tty_name.clone(),
+            browser_url: panel_snapshot
+                .browser
+                .as_ref()
+                .and_then(|b| b.url_string.clone()),
+            markdown_file: panel_snapshot.markdown.as_ref().map(|m| m.file_path.clone()),
+            command: {
+                // Prefer the agent resume command when one was detected at save time
+                // and the per-agent toggle is enabled in settings.
+                let agent_cmd = panel_snapshot
+                    .agent_resume_command
+                    .as_deref()
+                    .filter(|cmd| agent_restore_settings.is_enabled_for(cmd));
+                if let Some(cmd) = agent_cmd {
+                    tracing::info!(
+                        panel_id = %panel_snapshot.id,
+                        cmd,
+                        "Restoring agent session with resume command"
+                    );
+                    Some(cmd.to_string())
+                } else {
+                    panel_snapshot.command.clone()
+                }
+            },
+            pending_scrollback: panel_snapshot
+                .terminal
+                .as_ref()
+                .and_then(|t| t.scrollback.clone()),
+            pending_zoom: panel_snapshot
+                .browser
+                .as_ref()
+                .map(|b| b.page_zoom)
+                .filter(|&z| z != 1.0),
+            parent_panel_id: None,
+        };
+        panels.insert(panel.id, panel);
+    }
+
+    workspace.layout = layout;
+    workspace.panels = panels;
+    workspace.focused_panel_id = ws_snapshot.focused_panel_id;
+    workspace
+}
+
 fn restore_session(state: &Rc<AppState>) -> Vec<Uuid> {
     // Clean up temp scrollback files from the previous session before creating new ones.
     cleanup_scrollback_temp_files();
@@ -909,94 +1001,28 @@ fn restore_session(state: &Rc<AppState>) -> Vec<Uuid> {
             if ws_snapshot.panels.is_empty() {
                 continue; // Skip workspaces with no panels
             }
-            let mut workspace =
-                crate::model::Workspace::with_directory(&ws_snapshot.current_directory);
-            workspace.window_id = Some(window_id);
-            workspace.custom_title = ws_snapshot.custom_title.clone();
-            workspace.custom_color = ws_snapshot.custom_color.clone();
-            workspace.is_pinned = ws_snapshot.is_pinned;
-            workspace.process_title = ws_snapshot.process_title.clone();
-            workspace.status_entries = ws_snapshot.status_entries.clone();
-            workspace.log_entries = ws_snapshot.log_entries.clone();
-            workspace.progress = ws_snapshot.progress.clone();
-            workspace.git_branch = ws_snapshot.git_branch.clone();
-            workspace.remote_config = ws_snapshot.remote_config.clone();
-            workspace.group_id = ws_snapshot.group_id;
-
-            let layout = ws_snapshot.layout.to_layout();
-            let mut panels = std::collections::HashMap::new();
-            for panel_snapshot in &ws_snapshot.panels {
-                let panel_type = match panel_snapshot.panel_type.as_str() {
-                    #[cfg(feature = "webkit")]
-                    "browser" => crate::model::PanelType::Browser,
-                    #[cfg(feature = "webkit")]
-                    "markdown" => crate::model::PanelType::Markdown,
-                    #[cfg(not(feature = "webkit"))]
-                    "browser" | "markdown" => continue, // skip browser panels when webkit disabled
-                    "diff" => crate::model::PanelType::Diff,
-                    "project" => crate::model::PanelType::Project,
-                    "file_preview" => crate::model::PanelType::FilePreview,
-                    "notes" => crate::model::PanelType::Notes,
-                    "history" => crate::model::PanelType::History,
-                    "vault" => crate::model::PanelType::Vault,
-                    _ => crate::model::PanelType::Terminal,
-                };
-                let panel = crate::model::panel::Panel {
-                    id: panel_snapshot.id,
-                    panel_type,
-                    title: panel_snapshot.title.clone(),
-                    custom_title: panel_snapshot.custom_title.clone(),
-                    directory: panel_snapshot.directory.clone(),
-                    is_pinned: panel_snapshot.is_pinned,
-                    is_manually_unread: panel_snapshot.is_manually_unread,
-                    git_branch: panel_snapshot.git_branch.clone(),
-                    listening_ports: panel_snapshot.listening_ports.clone(),
-                    tty_name: panel_snapshot.tty_name.clone(),
-                    browser_url: panel_snapshot
-                        .browser
-                        .as_ref()
-                        .and_then(|b| b.url_string.clone()),
-                    markdown_file: panel_snapshot
-                        .markdown
-                        .as_ref()
-                        .map(|m| m.file_path.clone()),
-                    command: {
-                        // Prefer the agent resume command when one was detected at save time
-                        // and the per-agent toggle is enabled in settings.
-                        let agent_cmd = panel_snapshot
-                            .agent_resume_command
-                            .as_deref()
-                            .filter(|cmd| agent_restore_settings.is_enabled_for(cmd));
-                        if let Some(cmd) = agent_cmd {
-                            tracing::info!(
-                                panel_id = %panel_snapshot.id,
-                                cmd,
-                                "Restoring agent session with resume command"
-                            );
-                            Some(cmd.to_string())
-                        } else {
-                            panel_snapshot.command.clone()
-                        }
-                    },
-                    pending_scrollback: panel_snapshot
-                        .terminal
-                        .as_ref()
-                        .and_then(|t| t.scrollback.clone()),
-                    pending_zoom: panel_snapshot
-                        .browser
-                        .as_ref()
-                        .map(|b| b.page_zoom)
-                        .filter(|&z| z != 1.0),
-                    parent_panel_id: None,
-                };
-                panels.insert(panel.id, panel);
-            }
-
-            workspace.layout = layout;
-            workspace.panels = panels;
-            workspace.focused_panel_id = ws_snapshot.focused_panel_id;
+            let workspace = build_workspace_from_snapshot(
+                ws_snapshot,
+                Some(window_id),
+                &agent_restore_settings,
+            );
             restored_tm.add_workspace(workspace);
         }
+    }
+
+    // Restore the recently-closed history (for the History pane + reopen).
+    let closed_entries: Vec<crate::model::tab_manager::ClosedEntry> = snapshot
+        .closed_workspaces
+        .iter()
+        .filter(|e| !e.workspace.panels.is_empty())
+        .map(|e| crate::model::tab_manager::ClosedEntry {
+            workspace: build_workspace_from_snapshot(&e.workspace, None, &agent_restore_settings),
+            closed_at: std::time::UNIX_EPOCH + std::time::Duration::from_secs(e.closed_at_unix),
+            title: e.title.clone(),
+        })
+        .collect();
+    if !closed_entries.is_empty() {
+        restored_tm.set_closed_entries(closed_entries);
     }
 
     restored_tm.set_groups(restored_groups);
