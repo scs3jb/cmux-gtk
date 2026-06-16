@@ -9,5 +9,5 @@ Type=Application
 Categories=System;TerminalEmulator;Development;
 Keywords=terminal;multiplexer;browser;ai;coding;
 StartupNotify=true
-StartupWMClass=cmux-gtk
+StartupWMClass=io.github.douglas.cmux_gtk
 MimeType=x-scheme-handler/cmux;

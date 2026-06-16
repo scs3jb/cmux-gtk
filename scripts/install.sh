@@ -63,11 +63,14 @@ if [[ -d "$REPO_ROOT/cmux/icons/scalable" ]]; then
 fi
 
 # Application icon(s) into the hicolor theme (matches the desktop Icon=).
+# Install both the scalable SVG and the sized PNG renditions — some docks /
+# taskbars only resolve a pinned (not-running) launcher's icon via the PNG
+# sizes in the icon cache, showing a generic icon otherwise.
 if [[ -d "$REPO_ROOT/data/icons/hicolor" ]]; then
-  while IFS= read -r -d '' svg; do
-    rel="${svg#"$REPO_ROOT"/data/icons/hicolor/}"
-    install -Dm644 "$svg" "$PREFIX/share/icons/hicolor/$rel"
-  done < <(find "$REPO_ROOT/data/icons/hicolor" -name '*.svg' -print0)
+  while IFS= read -r -d '' icon; do
+    rel="${icon#"$REPO_ROOT"/data/icons/hicolor/}"
+    install -Dm644 "$icon" "$PREFIX/share/icons/hicolor/$rel"
+  done < <(find "$REPO_ROOT/data/icons/hicolor" \( -name '*.svg' -o -name '*.png' \) -print0)
 fi
 
 # Refresh caches (best-effort).
