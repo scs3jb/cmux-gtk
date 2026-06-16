@@ -253,6 +253,19 @@ pub fn create_window(
     }
     header.pack_end(&dock_btn);
 
+    // Pane overview button.
+    let overview_btn = gtk4::Button::from_icon_name("view-grid-symbolic");
+    overview_btn.set_tooltip_text(Some("Pane overview"));
+    overview_btn.add_css_class("flat");
+    {
+        let state = Rc::clone(state);
+        let window_ref = window.clone();
+        overview_btn.connect_clicked(move |_| {
+            crate::ui::pane_overview::show_pane_overview(&window_ref, &state);
+        });
+    }
+    header.pack_end(&overview_btn);
+
     let outer_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     outer_box.append(&header);
     outer_box.append(&split_view);

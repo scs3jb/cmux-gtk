@@ -865,12 +865,57 @@ fn read_cwd(proc_dir: &std::path::Path) -> Option<String> {
 /// Parse the ppid (field 4) from a `/proc/<pid>/stat` line, skipping the
 /// `(comm)` field which may itself contain spaces or parens.
 fn parse_ppid(stat: &str) -> Option<u32> {
+    stat_field_after_comm(stat, 1).map(|v| v as u32) // state, ppid
+}
+
+/// Parse a 0-indexed field after the `(comm)` field of `/proc/<pid>/stat`.
+/// Fields: 0=state 1=ppid 2=pgrp 3=session 4=tty_nr 5=tpgid …
+fn stat_field_after_comm(stat: &str, idx: usize) -> Option<i64> {
     let after_comm = stat.rfind(')')?;
     stat[after_comm + 1..]
         .trim()
         .split_ascii_whitespace()
-        .nth(1) // state, ppid
+        .nth(idx)
         .and_then(|s| s.parse().ok())
+}
+
+/// Find the shell process backing `panel_id` (matched by the `CMUX_PANEL_ID`
+/// env var cmux sets), preferring the direct child of this process.
+fn shell_pid_for_panel(panel_id: Uuid) -> Option<u32> {
+    let needle = format!("CMUX_PANEL_ID={panel_id}");
+    let me = std::process::id();
+    let mut fallback: Option<u32> = None;
+    for entry in std::fs::read_dir("/proc").ok()?.flatten() {
+        let Ok(pid) = entry.file_name().to_string_lossy().parse::<u32>() else {
+            continue;
+        };
+        let proc_dir = entry.path();
+        let Ok(environ) = std::fs::read(proc_dir.join("environ")) else {
+            continue;
+        };
+        if !environ.split(|&b| b == 0).any(|kv| kv == needle.as_bytes()) {
+            continue;
+        }
+        let ppid = std::fs::read_to_string(proc_dir.join("stat"))
+            .ok()
+            .and_then(|s| parse_ppid(&s));
+        if ppid == Some(me) {
+            return Some(pid);
+        }
+        fallback.get_or_insert(pid);
+    }
+    fallback
+}
+
+/// Whether a terminal pane is "busy" — a foreground command is running rather
+/// than the shell sitting at its prompt. `None` if it can't be determined.
+pub fn pane_is_busy(panel_id: Uuid) -> Option<bool> {
+    let shell_pid = shell_pid_for_panel(panel_id)?;
+    let stat = std::fs::read_to_string(format!("/proc/{shell_pid}/stat")).ok()?;
+    // tpgid = foreground process group of the controlling terminal. When it
+    // equals the shell's own pid, the shell is in the foreground (idle).
+    let tpgid = stat_field_after_comm(&stat, 5)?;
+    Some(tpgid > 0 && tpgid as u32 != shell_pid)
 }
 
 /// Reconstruct a `Workspace` from its session snapshot (used for both live

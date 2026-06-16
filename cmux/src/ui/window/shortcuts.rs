@@ -106,6 +106,12 @@ pub(super) fn setup_shortcuts(
                                 }
                                 super::refresh_ui(&list_box, &content_box, &state);
                             }
+                            // Open the pane overview grid.
+                            "overview.open" => {
+                                if let Some(window) = window_weak.upgrade() {
+                                    crate::ui::pane_overview::show_pane_overview(&window, &state);
+                                }
+                            }
                             // Reopen the most recently closed tab.
                             "tab.reopen" => {
                                 {

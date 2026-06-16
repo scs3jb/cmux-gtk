@@ -16,6 +16,7 @@ pub mod notes_panel;
 pub mod vault_panel;
 pub mod notifications_panel;
 pub mod omnibar;
+pub mod pane_overview;
 pub mod project_panel;
 pub mod search_overlay;
 pub mod settings;

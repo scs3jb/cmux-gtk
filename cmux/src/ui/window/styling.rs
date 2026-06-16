@@ -395,6 +395,18 @@ pub(super) fn install_css() {
             border-top: 1px solid alpha(@borders, 0.6);
         }
 
+        /* ── Pane overview ── */
+        .overview-tile-button {
+            padding: 10px;
+        }
+        .overview-tile-focused {
+            border: 2px solid alpha(@accent_color, 0.8);
+        }
+        .overview-dot-busy { color: @success_color; }
+        .overview-dot-idle { color: alpha(@window_fg_color, 0.4); }
+        .overview-dot-attention { color: @accent_color; }
+        .overview-dot-browser { color: alpha(@accent_color, 0.7); }
+
         /* ── Focused panel indicator ── */
         .focused-panel {
             border-color: alpha(@accent_color, 0.5);

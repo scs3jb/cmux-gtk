@@ -78,6 +78,9 @@ impl Default for ShortcutConfig {
         // it to the shell before cmux sees it, so use the header button or the
         // palette. Users can still bind a key here for non-terminal focus.
         bindings.insert("dock.toggle".into(), None);
+        // Open the pane overview grid (unbound by default; header button +
+        // palette are the reliable triggers over a focused terminal).
+        bindings.insert("overview.open".into(), None);
 
         // Workspace management. `workspace.new` has no default key (Ctrl+Shift+T
         // opens a new tab); it's reachable via the palette / sidebar / `cmux new`.
