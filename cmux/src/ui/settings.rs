@@ -436,6 +436,18 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
 
     appearance_page.add(&textbox_group);
 
+    // ── Dock group ──
+    let dock_group = adw::PreferencesGroup::new();
+    dock_group.set_title("Dock");
+    dock_group.set_description(Some(
+        "Right-side terminal controls from .cmux/dock.json (toggle with Ctrl+Shift+J).",
+    ));
+    let show_dock_row = adw::SwitchRow::new();
+    show_dock_row.set_title("Show Dock");
+    show_dock_row.set_active(current_settings.show_dock);
+    dock_group.add(&show_dock_row);
+    appearance_page.add(&dock_group);
+
     window.add(&appearance_page);
 
     // ── Notifications page ──
@@ -1183,6 +1195,7 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
                     .parse::<u32>()
                     .unwrap_or(6)
                     .clamp(1, 40),
+                show_dock: show_dock_row.is_active(),
                 shortcuts: shortcuts_state.borrow().clone(),
                 minimal_mode: current_settings.minimal_mode,
                 show_tab_close_button: show_tab_close_row.is_active(),

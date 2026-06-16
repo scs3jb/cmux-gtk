@@ -75,7 +75,23 @@ pub fn create_window(
     let search_count_label = search.count_label.clone();
     let search_state = search.state.clone();
 
-    let content_page = adw::NavigationPage::new(&search.overlay, "Terminal");
+    // Dock — right-side terminal controls from dock.json, placed beside the
+    // workspace content.
+    let dock_dir = {
+        let tm = crate::app::lock_or_recover(&state.shared.tab_manager);
+        tm.selected()
+            .map(|ws| ws.current_directory.clone())
+            .unwrap_or_default()
+    };
+    let dock_box = crate::ui::dock::create_dock(window_id, &dock_dir, state);
+    let content_with_dock = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+    content_with_dock.set_hexpand(true);
+    content_with_dock.set_vexpand(true);
+    search.overlay.set_hexpand(true);
+    content_with_dock.append(&search.overlay);
+    content_with_dock.append(&dock_box);
+
+    let content_page = adw::NavigationPage::new(&content_with_dock, "Terminal");
     split_view.set_content(Some(&content_page));
 
     // Notification panel — replaces sidebar when toggled

@@ -70,6 +70,8 @@ impl Default for ShortcutConfig {
         bindings.insert("tab.new".into(), Some(Keybinding::ctrl_shift("T")));
         // Focus the TextBox composer (unbound by default; set in Settings).
         bindings.insert("textbox.focus".into(), None);
+        // Toggle the Dock panel.
+        bindings.insert("dock.toggle".into(), Some(Keybinding::ctrl_shift("J")));
 
         // Workspace management. `workspace.new` has no default key (Ctrl+Shift+T
         // opens a new tab); it's reachable via the palette / sidebar / `cmux new`.

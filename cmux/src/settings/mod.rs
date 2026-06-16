@@ -84,6 +84,9 @@ pub struct AppSettings {
     /// Maximum visible lines in the TextBox before it scrolls.
     #[serde(default = "default_textbox_max_lines")]
     pub textbox_max_lines: u32,
+    /// Show the Dock (right-side terminal controls from dock.json).
+    #[serde(default = "default_true")]
+    pub show_dock: bool,
     /// Keyboard shortcuts.
     #[serde(skip)]
     pub shortcuts: shortcuts::ShortcutConfig,
@@ -751,6 +754,10 @@ fn default_textbox_max_lines() -> u32 {
     6
 }
 
+fn default_true() -> bool {
+    true
+}
+
 fn default_resume_command_approvals() -> Vec<String> {
     vec![
         "claude --resume".to_string(),
@@ -807,6 +814,7 @@ impl Default for AppSettings {
             show_textbox_on_new_terminals: false,
             focus_textbox_on_new_terminals: false,
             textbox_max_lines: default_textbox_max_lines(),
+            show_dock: true,
             shortcuts: shortcuts::ShortcutConfig::default(),
         }
     }

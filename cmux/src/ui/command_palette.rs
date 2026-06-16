@@ -250,6 +250,7 @@ fn build_actions(state: &Rc<AppState>) -> Rc<Vec<PaletteAction>> {
         cmd("workspace.rename", "Rename Workspace"),
         cmd("workspace.pin", "Pin/Unpin Workspace"),
         cmd("sidebar.toggle", "Toggle Sidebar"),
+        cmd("dock.toggle", "Toggle Dock"),
         cmd("workspace.mark_read", "Mark Workspace as Read"),
         cmd("workspace.mark_unread", "Mark Workspace as Unread"),
         cmd("open_folder", "Open Folder in File Manager"),
@@ -1114,6 +1115,13 @@ fn execute_action(name: &str, state: &Rc<AppState>, on_refresh: &Rc<dyn Fn()>) {
         name if name.starts_with("workspace.select.") => {
             if let Ok(index) = name[17..].parse::<usize>() {
                 lock_or_recover(&state.shared.tab_manager).select(index);
+            }
+        }
+        "dock.toggle" => {
+            if let Some(win) = active_app_window() {
+                if let Ok(wid) = uuid::Uuid::parse_str(&win.widget_name()) {
+                    crate::ui::dock::toggle(wid);
+                }
             }
         }
         name if name.starts_with("custom:") => {

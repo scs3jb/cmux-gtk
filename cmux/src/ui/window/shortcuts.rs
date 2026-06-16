@@ -60,6 +60,7 @@ pub(super) fn setup_shortcuts(
                 "notification.toggle_unread",
                 "tab.new",
                 "textbox.focus",
+                "dock.toggle",
                 "close.tab",
                 "close.tab.others",
                 "find.in_directory",
@@ -112,6 +113,16 @@ pub(super) fn setup_shortcuts(
                                 };
                                 if let Some(panel_id) = panel_id {
                                     crate::ui::textbox::focus_textbox(panel_id);
+                                }
+                            }
+                            // Toggle the Dock panel for this window.
+                            "dock.toggle" => {
+                                if let Some(window) = window_weak.upgrade() {
+                                    if let Ok(wid) =
+                                        uuid::Uuid::parse_str(&window.widget_name())
+                                    {
+                                        crate::ui::dock::toggle(wid);
+                                    }
                                 }
                             }
                             // Close the focused panel (browser-style Ctrl+W).

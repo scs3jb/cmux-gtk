@@ -380,6 +380,21 @@ pub(super) fn install_css() {
             background-color: alpha(black, 0.12);
         }
 
+        /* ── Dock panel ── */
+        .dock-panel {
+            border-left: 1px solid alpha(@borders, 0.8);
+        }
+        .dock-control {
+            border-top: 1px solid alpha(@borders, 0.5);
+        }
+        .dock-control-title {
+            opacity: 0.7;
+        }
+        /* ── TextBox composer ── */
+        .textbox-composer {
+            border-top: 1px solid alpha(@borders, 0.6);
+        }
+
         /* ── Focused panel indicator ── */
         .focused-panel {
             border-color: alpha(@accent_color, 0.5);
