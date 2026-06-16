@@ -4,12 +4,15 @@ use std::rc::Rc;
 
 use gtk4::prelude::*;
 use libadwaita as adw;
+use libadwaita::prelude::*;
 
 use crate::app::{lock_or_recover, AppState};
+use crate::settings::custom_commands::CommandEntry;
 use crate::model::panel::SplitOrientation;
 use crate::model::{PanelType, Workspace};
 
 /// A registered command palette action.
+#[derive(Default)]
 struct PaletteAction {
     name: String,
     label: String,
@@ -19,6 +22,8 @@ struct PaletteAction {
     is_workspace: bool,
     /// Whether this is a surface text search result (only shown when query is non-empty).
     is_search_result: bool,
+    /// Extra terms (custom-command keywords) matched in search but not displayed.
+    search_terms: String,
 }
 
 /// Show the command palette as a modal dialog.
@@ -206,6 +211,7 @@ fn build_actions(state: &Rc<AppState>) -> Rc<Vec<PaletteAction>> {
             shortcut,
             is_workspace: false,
             is_search_result: false,
+            search_terms: String::new(),
         }
     };
 
@@ -282,6 +288,7 @@ fn build_actions(state: &Rc<AppState>) -> Rc<Vec<PaletteAction>> {
             shortcut: None,
             is_workspace: false,
             is_search_result: false,
+            search_terms: String::new(),
         });
     }
 
@@ -304,6 +311,7 @@ fn build_actions(state: &Rc<AppState>) -> Rc<Vec<PaletteAction>> {
                 shortcut: None,
                 is_workspace: false,
                 is_search_result: false,
+                search_terms: String::new(),
             });
         }
     }
@@ -349,6 +357,7 @@ fn build_actions(state: &Rc<AppState>) -> Rc<Vec<PaletteAction>> {
                 shortcut,
                 is_workspace: true,
                 is_search_result: false,
+                search_terms: String::new(),
             });
         }
     }
@@ -378,6 +387,7 @@ fn build_actions(state: &Rc<AppState>) -> Rc<Vec<PaletteAction>> {
                                 shortcut: None,
                                 is_workspace: false,
                                 is_search_result: true,
+                                search_terms: String::new(),
                             });
                         }
                     }
@@ -386,30 +396,23 @@ fn build_actions(state: &Rc<AppState>) -> Rc<Vec<PaletteAction>> {
         }
     }
 
-    // Load custom commands from cmux.json in the current workspace directory
+    // Load custom commands from cmux.json (project .cmux/, project root, global).
     let workspace_dir = {
         let tm = lock_or_recover(&state.shared.tab_manager);
-        tm.selected().map(|ws| ws.current_directory.clone()).unwrap_or_default()
+        tm.selected()
+            .map(|ws| ws.current_directory.clone())
+            .unwrap_or_default()
     };
-    let cmux_json_path = std::path::Path::new(&workspace_dir).join("cmux.json");
-    if let Ok(content) = std::fs::read_to_string(&cmux_json_path) {
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-            if let Some(commands) = json.get("commands").and_then(|c| c.as_array()) {
-                for entry in commands {
-                    let name = entry.get("name").and_then(|n| n.as_str()).unwrap_or("");
-                    let command = entry.get("command").and_then(|c| c.as_str()).unwrap_or("");
-                    if !name.is_empty() && !command.is_empty() {
-                        actions.push(PaletteAction {
-                            name: format!("custom_cmd:{command}"),
-                            label: format!("\u{25b6} {name}"),
-                            shortcut: None,
-                            is_workspace: false,
-                            is_search_result: false,
-                        });
-                    }
-                }
-            }
-        }
+    for entry in crate::settings::custom_commands::load(&workspace_dir) {
+        // Dispatch by name (re-resolved on execute, so confirm/workspace work).
+        actions.push(PaletteAction {
+            name: format!("custom:{}", entry.name),
+            label: format!("\u{25b6} {}", entry.name),
+            shortcut: None,
+            is_workspace: false,
+            is_search_result: false,
+            search_terms: entry.keywords.join(" "),
+        });
     }
 
     Rc::new(actions)
@@ -447,8 +450,13 @@ fn populate_list(list_box: &gtk4::ListBox, actions: &[PaletteAction], query: &st
             }
         }
 
-        if !filter_query.is_empty() && !fuzzy_match(&action.label, &filter_query) {
-            continue;
+        if !filter_query.is_empty() {
+            let label_match = fuzzy_match(&action.label, &filter_query);
+            let terms_match = !action.search_terms.is_empty()
+                && fuzzy_match(&action.search_terms, &filter_query);
+            if !label_match && !terms_match {
+                continue;
+            }
         }
 
         let row = gtk4::ListBoxRow::new();
@@ -518,6 +526,72 @@ fn open_in_editor(path: &std::path::Path) {
         let _ = std::process::Command::new(&editor).arg(path).spawn();
     } else {
         let _ = std::process::Command::new("xdg-open").arg(path).spawn();
+    }
+}
+
+/// The current application window (for parenting dialogs).
+fn active_app_window() -> Option<adw::ApplicationWindow> {
+    gtk4::gio::Application::default()
+        .and_then(|a| a.downcast::<adw::Application>().ok())
+        .and_then(|a| a.active_window())
+        .and_then(|w| w.downcast::<adw::ApplicationWindow>().ok())
+}
+
+/// Run a custom command from cmux.json — optionally behind a confirmation
+/// dialog, then either run the shell command or open the workspace layout.
+fn run_custom_command(
+    entry: &CommandEntry,
+    base_dir: &str,
+    state: &Rc<AppState>,
+    on_refresh: &Rc<dyn Fn()>,
+) {
+    if entry.confirm {
+        let body = entry
+            .description
+            .clone()
+            .unwrap_or_else(|| format!("Run \u{201c}{}\u{201d}?", entry.name));
+        let dialog =
+            adw::MessageDialog::new(active_app_window().as_ref(), Some("Run command?"), Some(&body));
+        dialog.add_response("cancel", "Cancel");
+        dialog.add_response("run", "Run");
+        dialog.set_default_response(Some("run"));
+        dialog.set_close_response("cancel");
+        dialog.set_response_appearance("run", adw::ResponseAppearance::Suggested);
+        let entry = entry.clone();
+        let base_dir = base_dir.to_string();
+        let state = state.clone();
+        let on_refresh = on_refresh.clone();
+        dialog.connect_response(None, move |_, response| {
+            if response == "run" {
+                do_custom_command(&entry, &base_dir, &state);
+                on_refresh();
+            }
+        });
+        dialog.present();
+        return;
+    }
+    do_custom_command(entry, base_dir, state);
+    on_refresh();
+}
+
+fn do_custom_command(entry: &CommandEntry, base_dir: &str, state: &Rc<AppState>) {
+    if let Some(spec) = &entry.workspace {
+        let mut ws = crate::settings::custom_commands::build_workspace(spec, base_dir);
+        let ws_id = ws.id;
+        let mut tm = lock_or_recover(&state.shared.tab_manager);
+        ws.window_id = tm.selected().and_then(|w| w.window_id);
+        tm.add_workspace(ws);
+        tm.select_by_id(ws_id);
+    } else if let Some(command) = &entry.command {
+        let panel_id = {
+            let tm = lock_or_recover(&state.shared.tab_manager);
+            tm.selected().and_then(|w| w.focused_panel_id)
+        };
+        if let Some(panel_id) = panel_id {
+            if let Some(surface) = state.terminal_cache.borrow().get(&panel_id) {
+                surface.send_text(&format!("{command}\n"));
+            }
+        }
     }
 }
 
@@ -1042,15 +1116,22 @@ fn execute_action(name: &str, state: &Rc<AppState>, on_refresh: &Rc<dyn Fn()>) {
                 lock_or_recover(&state.shared.tab_manager).select(index);
             }
         }
-        name if name.starts_with("custom_cmd:") => {
-            let command = &name["custom_cmd:".len()..];
-            if let Some(ws) = lock_or_recover(&state.shared.tab_manager).selected() {
-                if let Some(panel_id) = ws.focused_panel_id {
-                    if let Some(surface) = state.terminal_cache.borrow().get(&panel_id) {
-                        surface.send_text(&format!("{command}\n"));
-                    }
-                }
-            }
+        name if name.starts_with("custom:") => {
+            let cmd_name = &name["custom:".len()..];
+            // Re-resolve from cmux.json so confirm/workspace are honored.
+            let workspace_dir = {
+                let tm = lock_or_recover(&state.shared.tab_manager);
+                tm.selected()
+                    .map(|ws| ws.current_directory.clone())
+                    .unwrap_or_default()
+            };
+            let Some(entry) = crate::settings::custom_commands::load(&workspace_dir)
+                .into_iter()
+                .find(|e| e.name == cmd_name)
+            else {
+                return;
+            };
+            run_custom_command(&entry, &workspace_dir, state, on_refresh);
             return;
         }
         name if name.starts_with("surface.search.") => {

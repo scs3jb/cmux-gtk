@@ -1,5 +1,6 @@
 //! Application settings — persistent configuration loaded from XDG config dir.
 
+pub mod custom_commands;
 pub mod shortcuts;
 
 use serde::{Deserialize, Serialize};
