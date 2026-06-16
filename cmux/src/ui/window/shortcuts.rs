@@ -58,6 +58,7 @@ pub(super) fn setup_shortcuts(
             let configurable_actions = [
                 "notification.defer_unread",
                 "notification.toggle_unread",
+                "tab.new",
                 "close.tab",
                 "close.tab.others",
                 "find.in_directory",
@@ -79,6 +80,28 @@ pub(super) fn setup_shortcuts(
                                 state
                                     .shared
                                     .send_ui_event(crate::app::UiEvent::ToggleUnread);
+                            }
+                            // New tab (terminal) in the current pane, inheriting
+                            // the focused terminal's working directory.
+                            "tab.new" => {
+                                {
+                                    let mut tm = lock_or_recover(&state.shared.tab_manager);
+                                    if let Some(ws) = tm.selected_mut() {
+                                        let mut panel = crate::model::Panel::new_terminal();
+                                        panel.directory = crate::app::new_tab_directory(ws);
+                                        let new_id = panel.id;
+                                        ws.panels.insert(new_id, panel);
+                                        let target = ws.focused_panel_id.or_else(|| {
+                                            ws.layout.all_panel_ids().into_iter().next()
+                                        });
+                                        if let Some(target) = target {
+                                            ws.layout.add_panel_to_pane(target, new_id);
+                                        }
+                                        ws.previous_focused_panel_id = ws.focused_panel_id;
+                                        ws.focused_panel_id = Some(new_id);
+                                    }
+                                }
+                                super::refresh_ui(&list_box, &content_box, &state);
                             }
                             // Close the focused panel (browser-style Ctrl+W).
                             "close.tab" => {
@@ -477,29 +500,6 @@ pub(super) fn setup_shortcuts(
                 glib::Propagation::Stop
             }
             // Ctrl+Shift+T: New workspace
-            // Ctrl+Shift+T: New tab (terminal) in the current pane.
-            (gdk4::Key::T, true, true) => {
-                {
-                    let mut tm = lock_or_recover(&state.shared.tab_manager);
-                    if let Some(ws) = tm.selected_mut() {
-                        let mut panel = crate::model::Panel::new_terminal();
-                        // Inherit the focused terminal's working directory.
-                        panel.directory = crate::app::new_tab_directory(ws);
-                        let new_id = panel.id;
-                        ws.panels.insert(new_id, panel);
-                        let target = ws
-                            .focused_panel_id
-                            .or_else(|| ws.layout.all_panel_ids().into_iter().next());
-                        if let Some(target) = target {
-                            ws.layout.add_panel_to_pane(target, new_id);
-                        }
-                        ws.previous_focused_panel_id = ws.focused_panel_id;
-                        ws.focused_panel_id = Some(new_id);
-                    }
-                }
-                super::refresh_ui(&list_box, &content_box, &state);
-                glib::Propagation::Stop
-            }
             // Ctrl+Shift+N: New window
             (gdk4::Key::N, true, true) => {
                 state

@@ -66,8 +66,12 @@ impl Default for ShortcutConfig {
     fn default() -> Self {
         let mut bindings = HashMap::new();
 
-        // Workspace management
-        bindings.insert("workspace.new".into(), Some(Keybinding::ctrl_shift("T")));
+        // New tab (terminal) in the current pane.
+        bindings.insert("tab.new".into(), Some(Keybinding::ctrl_shift("T")));
+
+        // Workspace management. `workspace.new` has no default key (Ctrl+Shift+T
+        // opens a new tab); it's reachable via the palette / sidebar / `cmux new`.
+        bindings.insert("workspace.new".into(), None);
         bindings.insert("workspace.close".into(), Some(Keybinding::ctrl_shift("W")));
         bindings.insert(
             "workspace.latest_unread".into(),
@@ -271,10 +275,18 @@ impl ShortcutConfig {
 pub fn load() -> ShortcutConfig {
     let path = super::config_dir().join("shortcuts.json");
     match std::fs::read_to_string(&path) {
-        Ok(content) => serde_json::from_str(&content).unwrap_or_else(|err| {
-            tracing::warn!("Failed to parse {}: {err}", path.display());
-            ShortcutConfig::default()
-        }),
+        Ok(content) => {
+            let mut config: ShortcutConfig = serde_json::from_str(&content).unwrap_or_else(|err| {
+                tracing::warn!("Failed to parse {}: {err}", path.display());
+                ShortcutConfig::default()
+            });
+            // Merge in defaults for any actions the saved file predates (e.g.
+            // newly added shortcuts), without overriding user customizations.
+            for (action, binding) in ShortcutConfig::default().bindings {
+                config.bindings.entry(action).or_insert(binding);
+            }
+            config
+        }
         Err(_) => ShortcutConfig::default(),
     }
 }

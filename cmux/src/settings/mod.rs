@@ -70,6 +70,10 @@ pub struct AppSettings {
     /// chat bubbles in the sidebar (applies globally; per-workspace toggle overrides).
     #[serde(default)]
     pub imessage_mode: bool,
+    /// Path to the notes scratchpad file. Empty = default
+    /// (`$XDG_DATA_HOME/cmux/notes.md`). Supports a leading `~`.
+    #[serde(default)]
+    pub notes_path: String,
     /// Keyboard shortcuts.
     #[serde(skip)]
     pub shortcuts: shortcuts::ShortcutConfig,
@@ -785,6 +789,7 @@ impl Default for AppSettings {
             agent_restore: AgentRestoreSettings::default(),
             resume_command_approvals: default_resume_command_approvals(),
             imessage_mode: false,
+            notes_path: String::new(),
             shortcuts: shortcuts::ShortcutConfig::default(),
         }
     }

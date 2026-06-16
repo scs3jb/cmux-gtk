@@ -15,6 +15,23 @@ const SAVE_DEBOUNCE_MS: u64 = 800;
 
 /// Default notes file when none is given: `<data>/cmux/notes.md`.
 pub fn default_notes_path() -> String {
+    // A configured path overrides the default (supports a leading `~`).
+    let configured = crate::settings::load().notes_path;
+    let configured = configured.trim();
+    if !configured.is_empty() {
+        let expanded = if let Some(rest) = configured.strip_prefix("~/") {
+            dirs::home_dir()
+                .map(|h| h.join(rest))
+                .unwrap_or_else(|| PathBuf::from(configured))
+        } else {
+            PathBuf::from(configured)
+        };
+        if let Some(parent) = expanded.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        return expanded.to_string_lossy().into_owned();
+    }
+
     let dir = dirs::data_dir()
         .or_else(|| dirs::home_dir().map(|h| h.join(".local/share")))
         .unwrap_or_else(std::env::temp_dir)

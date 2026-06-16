@@ -401,6 +401,14 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
     copy_on_select_row.set_active(current_settings.copy_on_select);
     terminal_group.add(&copy_on_select_row);
 
+    let notes_path_row = adw::EntryRow::new();
+    notes_path_row.set_title("Notes File");
+    notes_path_row.set_tooltip_text(Some(
+        "Path for the notes scratchpad (cmux notes). Leave empty for the default (~/.local/share/cmux/notes.md). A leading ~ is expanded.",
+    ));
+    notes_path_row.set_text(&current_settings.notes_path);
+    terminal_group.add(&notes_path_row);
+
     appearance_page.add(&terminal_group);
 
     window.add(&appearance_page);
@@ -1142,6 +1150,7 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
                 },
                 resume_command_approvals: current_settings.resume_command_approvals.clone(),
                 imessage_mode: current_settings.imessage_mode,
+                notes_path: notes_path_row.text().trim().to_string(),
                 shortcuts: shortcuts_state.borrow().clone(),
                 minimal_mode: current_settings.minimal_mode,
                 show_tab_close_button: show_tab_close_row.is_active(),
