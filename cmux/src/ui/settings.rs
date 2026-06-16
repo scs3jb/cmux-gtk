@@ -440,7 +440,7 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
     let dock_group = adw::PreferencesGroup::new();
     dock_group.set_title("Dock");
     dock_group.set_description(Some(
-        "Right-side terminal controls from .cmux/dock.json (toggle with Ctrl+Shift+L).",
+        "Right-side terminal controls from .cmux/dock.json (toggle with the header Dock button or palette).",
     ));
     let show_dock_row = adw::SwitchRow::new();
     show_dock_row.set_title("Show Dock");

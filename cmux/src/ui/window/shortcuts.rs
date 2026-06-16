@@ -121,7 +121,13 @@ pub(super) fn setup_shortcuts(
                                     if let Ok(wid) =
                                         uuid::Uuid::parse_str(&window.widget_name())
                                     {
-                                        crate::ui::dock::toggle(wid);
+                                        let dir = {
+                                            let tm = lock_or_recover(&state.shared.tab_manager);
+                                            tm.selected()
+                                                .map(|ws| ws.current_directory.clone())
+                                                .unwrap_or_default()
+                                        };
+                                        crate::ui::dock::toggle(wid, &dir, &state);
                                     }
                                 }
                             }

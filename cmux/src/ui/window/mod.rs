@@ -234,6 +234,25 @@ pub fn create_window(
     }
     header.pack_end(&settings_btn);
 
+    // Dock toggle button — reliable even when a terminal grabs the keyboard
+    // shortcut (Kitty keyboard protocol).
+    let dock_btn = gtk4::Button::from_icon_name("sidebar-show-right-symbolic");
+    dock_btn.set_tooltip_text(Some("Toggle Dock"));
+    dock_btn.add_css_class("flat");
+    {
+        let state = Rc::clone(state);
+        dock_btn.connect_clicked(move |_| {
+            let dir = {
+                let tm = crate::app::lock_or_recover(&state.shared.tab_manager);
+                tm.selected()
+                    .map(|ws| ws.current_directory.clone())
+                    .unwrap_or_default()
+            };
+            crate::ui::dock::toggle(window_id, &dir, &state);
+        });
+    }
+    header.pack_end(&dock_btn);
+
     let outer_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     outer_box.append(&header);
     outer_box.append(&split_view);

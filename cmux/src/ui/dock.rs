@@ -22,8 +22,8 @@ use uuid::Uuid;
 use crate::app::AppState;
 
 thread_local! {
-    /// window_id → dock Box, so a shortcut/palette can toggle it.
-    static DOCKS: RefCell<HashMap<String, gtk4::Box>> = RefCell::new(HashMap::new());
+    /// window_id → dock, so a shortcut/palette/button can toggle it.
+    static DOCKS: RefCell<HashMap<String, DockEntry>> = RefCell::new(HashMap::new());
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -85,38 +85,67 @@ pub fn create_dock(window_id: Uuid, workspace_dir: &str, state: &Rc<AppState>) -
     let dock = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     dock.add_css_class("dock-panel");
     dock.set_width_request(360);
-
-    let controls = load(workspace_dir);
-    if controls.is_empty() {
-        dock.set_visible(false);
-    } else {
-        let header = gtk4::Label::new(Some("Dock"));
-        header.add_css_class("dim-label");
-        header.add_css_class("caption-heading");
-        header.set_xalign(0.0);
-        header.set_margin_start(8);
-        header.set_margin_top(6);
-        header.set_margin_bottom(2);
-        dock.append(&header);
-
-        for control in controls {
-            dock.append(&build_control(window_id, &control, workspace_dir, state));
-        }
-        dock.set_visible(crate::settings::load().show_dock);
-    }
+    dock.set_visible(false);
 
     DOCKS.with(|m| {
-        m.borrow_mut().insert(window_id.to_string(), dock.clone());
+        m.borrow_mut().insert(
+            window_id.to_string(),
+            DockEntry {
+                dock_box: dock.clone(),
+                built: false,
+            },
+        );
     });
+
+    // Show on startup if enabled (builds from the current dock.json).
+    if crate::settings::load().show_dock {
+        set_visible(window_id, workspace_dir, state, true);
+    }
     dock
 }
 
-fn build_control(
-    window_id: Uuid,
-    control: &DockControl,
-    base_dir: &str,
-    state: &Rc<AppState>,
-) -> gtk4::Widget {
+/// A registered dock for one window.
+struct DockEntry {
+    dock_box: gtk4::Box,
+    built: bool,
+}
+
+/// (Re)build the dock contents from `workspace_dir`'s dock.json. Shows a hint
+/// when no controls are configured so toggling always gives visible feedback.
+fn build_into(dock: &gtk4::Box, workspace_dir: &str, state: &Rc<AppState>) {
+    while let Some(child) = dock.first_child() {
+        dock.remove(&child);
+    }
+
+    let header = gtk4::Label::new(Some("Dock"));
+    header.add_css_class("dim-label");
+    header.add_css_class("caption-heading");
+    header.set_xalign(0.0);
+    header.set_margin_start(8);
+    header.set_margin_top(6);
+    header.set_margin_bottom(2);
+    dock.append(&header);
+
+    let controls = load(workspace_dir);
+    if controls.is_empty() {
+        let hint = gtk4::Label::new(Some(
+            "No dock controls configured.\n\nAdd a dock.json with:\n\n{\n  \"controls\": [\n    { \"id\": \"git\",\n      \"title\": \"Git\",\n      \"command\": \"lazygit\" }\n  ]\n}\n\nin .cmux/dock.json (this project)\nor ~/.config/cmux/dock.json (global).",
+        ));
+        hint.add_css_class("dim-label");
+        hint.set_wrap(true);
+        hint.set_xalign(0.0);
+        hint.set_margin_start(10);
+        hint.set_margin_end(10);
+        hint.set_margin_top(8);
+        dock.append(&hint);
+    } else {
+        for control in controls {
+            dock.append(&build_control(&control, workspace_dir, state));
+        }
+    }
+}
+
+fn build_control(control: &DockControl, base_dir: &str, state: &Rc<AppState>) -> gtk4::Widget {
     let section = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     section.add_css_class("dock-control");
 
@@ -132,7 +161,6 @@ fn build_control(
 
     let cwd = resolve_dir(control.cwd.as_deref(), base_dir);
     // The dock is built once per window, so a fresh id per control is fine.
-    let _ = window_id;
     let surface_id = Uuid::new_v4();
     let surface = state.terminal_surface_for(surface_id, Some(&cwd), Some(&control.command));
     if let Some(parent) = surface.parent() {
@@ -147,21 +175,37 @@ fn build_control(
     section.upcast()
 }
 
-/// Toggle the dock visibility for `window_id`. Returns the new visibility.
-pub fn toggle(window_id: Uuid) -> bool {
+/// Show or hide the dock for `window_id`, building it from `workspace_dir` on
+/// first show. Returns the resulting visibility.
+pub fn set_visible(
+    window_id: Uuid,
+    workspace_dir: &str,
+    state: &Rc<AppState>,
+    visible: bool,
+) -> bool {
     DOCKS.with(|m| {
-        if let Some(dock) = m.borrow().get(&window_id.to_string()) {
-            // Empty docks (no controls / no children) stay hidden.
-            if dock.first_child().is_none() {
-                return false;
-            }
-            let visible = !dock.is_visible();
-            dock.set_visible(visible);
-            visible
-        } else {
-            false
+        let mut map = m.borrow_mut();
+        let Some(entry) = map.get_mut(&window_id.to_string()) else {
+            return false;
+        };
+        if visible && !entry.built {
+            build_into(&entry.dock_box, workspace_dir, state);
+            entry.built = true;
         }
+        entry.dock_box.set_visible(visible);
+        visible
     })
+}
+
+/// Toggle the dock for `window_id`. Returns the new visibility.
+pub fn toggle(window_id: Uuid, workspace_dir: &str, state: &Rc<AppState>) -> bool {
+    let currently_visible = DOCKS.with(|m| {
+        m.borrow()
+            .get(&window_id.to_string())
+            .map(|e| e.dock_box.is_visible())
+            .unwrap_or(false)
+    });
+    set_visible(window_id, workspace_dir, state, !currently_visible)
 }
 
 /// Resolve a `cwd` field (`.`/empty → base, `~/x`, `/abs`, or relative).

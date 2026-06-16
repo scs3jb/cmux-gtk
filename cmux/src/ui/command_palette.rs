@@ -1120,7 +1120,13 @@ fn execute_action(name: &str, state: &Rc<AppState>, on_refresh: &Rc<dyn Fn()>) {
         "dock.toggle" => {
             if let Some(win) = active_app_window() {
                 if let Ok(wid) = uuid::Uuid::parse_str(&win.widget_name()) {
-                    crate::ui::dock::toggle(wid);
+                    let dir = {
+                        let tm = lock_or_recover(&state.shared.tab_manager);
+                        tm.selected()
+                            .map(|ws| ws.current_directory.clone())
+                            .unwrap_or_default()
+                    };
+                    crate::ui::dock::toggle(wid, &dir, state);
                 }
             }
         }
