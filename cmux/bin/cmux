@@ -312,6 +312,41 @@ _cmux_tmux_compat() {
   esac
 }
 
+# Install a private tmux + terminal-notifier shim into <dir> so agent tools
+# (Claude Code teams, oh-my-openagent) drive cmux panes/notifications instead
+# of a real tmux. The shims re-enter this CLI via $CMUX_TMUX_SHIM_BIN.
+_cmux_install_tmux_shim() {
+  local dir="$1"
+  mkdir -p "$dir"
+  # tmux → cmux __tmux-compat
+  cat > "$dir/tmux" <<'SHIMEOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  -V|-v) echo "tmux 3.4"; exit 0 ;;
+esac
+exec "${CMUX_TMUX_SHIM_BIN:-cmux}" __tmux-compat "$@"
+SHIMEOF
+  chmod +x "$dir/tmux"
+  # terminal-notifier → cmux notify (so agent notifications surface in cmux)
+  cat > "$dir/terminal-notifier" <<'SHIMEOF'
+#!/usr/bin/env bash
+set -euo pipefail
+title="" message="" subtitle=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -title)    shift; title="${1:-}";    shift ;;
+    -message)  shift; message="${1:-}";  shift ;;
+    -subtitle) shift; subtitle="${1:-}"; shift ;;
+    *) shift ;;
+  esac
+done
+[[ -n "$subtitle" ]] && title="${title:+$title — }$subtitle"
+exec "${CMUX_TMUX_SHIM_BIN:-cmux}" notify "$title" "$message"
+SHIMEOF
+  chmod +x "$dir/terminal-notifier"
+}
+
 # ── Main ──────────────────────────────────────────────────────────────
 # Global --json flag: print raw JSON-RPC responses (incl. for action commands).
 if [[ "${1:-}" == "--json" ]]; then
@@ -398,9 +433,15 @@ Windows
   window displays            List connected monitors
   window display <name|idx>  Move the window to a monitor (fullscreens it)
 
+Agent integrations
+  claude-teams [args...]     Launch Claude Code in agent-teams mode; teammates
+                             open as native cmux panes (tmux shim)
+  omo [args...]              Launch OpenCode / oh-my-openagent; subagents open
+                             as native cmux panes (tmux shim)
+
 Misc
   status / progress / log    Update sidebar metadata for the current workspace
-  notify <text>              Post a notification
+  notify <title> [message]   Post a notification
   notifications              List notifications (JSON)
   markdown, md <file>        Open a markdown viewer
   themes [filter]            List bundled Ghostty themes
@@ -901,6 +942,37 @@ case "$command" in
     esac
     ;;
 
+  # ── Claude Code agent-teams integration ──
+  claude-teams)
+    if ! command -v claude >/dev/null 2>&1; then
+      echo "error: claude (Claude Code) not found in PATH" >&2
+      echo "Install it first:  npm install -g @anthropic-ai/claude-code" >&2
+      exit 1
+    fi
+    # Intercept tmux + terminal-notifier so teammates open as cmux panes.
+    ct_shim_dir="${HOME}/.cmuxterm/claude-teams-bin"
+    _cmux_install_tmux_shim "$ct_shim_dir"
+    export CMUX_TMUX_SHIM_BIN="${0}"
+    export PATH="${ct_shim_dir}:${PATH}"
+    # Enable Claude Code's experimental agent-teams mode and fake a tmux session
+    # so it drives teammates through the shim.
+    export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+    export TMUX="${ct_shim_dir}/cmux-claude-teams,$$,0"
+    export TMUX_PANE="%0"
+    export TERM="${CMUX_CLAUDE_TEAMS_TERM:-screen-256color}"
+    unset TERM_PROGRAM 2>/dev/null || true
+    # Default --teammate-mode to auto unless the user passed one.
+    ct_has_mode=false
+    for _arg in "$@"; do
+      [[ "$_arg" == "--teammate-mode" || "$_arg" == --teammate-mode=* ]] && ct_has_mode=true && break
+    done
+    if $ct_has_mode; then
+      exec claude "$@"
+    else
+      exec claude --teammate-mode auto "$@"
+    fi
+    ;;
+
   # ── OpenCode / oh-my-opencode integration ──
   omo)
     if ! command -v opencode >/dev/null 2>&1; then
@@ -908,20 +980,10 @@ case "$command" in
       echo "Install it first:  npm install -g opencode-ai  # or: bun install -g opencode-ai" >&2
       exit 1
     fi
-    # Create tmux shim directory
+    # Intercept tmux + terminal-notifier; route them through this CLI.
     omo_shim_dir="${HOME}/.cmuxterm/cmux-omo-bin"
-    mkdir -p "$omo_shim_dir"
-    # Shim: intercept tmux calls and route through cmux __tmux-compat
-    cat > "$omo_shim_dir/tmux" <<'SHIMEOF'
-#!/usr/bin/env bash
-set -euo pipefail
-case "${1:-}" in
-  -V|-v) echo "tmux 3.4"; exit 0 ;;
-esac
-exec "${CMUX_OMO_CMUX_BIN:-cmux}" __tmux-compat "$@"
-SHIMEOF
-    chmod +x "$omo_shim_dir/tmux"
-    export CMUX_OMO_CMUX_BIN="${0}"
+    _cmux_install_tmux_shim "$omo_shim_dir"
+    export CMUX_TMUX_SHIM_BIN="${0}"
     export PATH="${omo_shim_dir}:${PATH}"
     [[ -z "${OPENCODE_PORT:-}" ]] && export OPENCODE_PORT="4096"
     # Check if --port already in args

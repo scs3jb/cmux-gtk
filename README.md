@@ -72,6 +72,7 @@ cargo build --release --no-default-features --features cmux/link-ghostty
 - **History pane** — `cmux history` opens a searchable, day-grouped list of recently closed workspaces (click to reopen, "Clear Closed") plus recently focused workspaces
 - **Vault pane** — `cmux vault` indexes past Claude Code / Codex sessions (`~/.claude/projects`, `~/.codex/sessions`) with title/dir/preview search; click a session to resume it in a terminal
 - **Task Manager** — `cmux top` opens the CPU/RAM monitor for agent/terminal processes (also Ctrl+Shift+A / command palette); `cmux ps` prints the same as JSON
+- **Agent integrations** — `cmux claude-teams` (Claude Code agent-teams) and `cmux omo` (OpenCode / oh-my-openagent) launch agents whose teammates/subagents open as native cmux panes. A private tmux shim translates `split-window`/`send-keys`/`capture-pane` → `surface.split`/`send_text`/`read_text`, and `terminal-notifier` → `cmux notify` — no real tmux required
 - **Diff sources** — `cmux diff --staged` / `--branch <ref>` select what the diff viewer shows; `cmux read --scrollback --lines N` reads terminal history
 - **Welcome screen** — first-launch getting-started tips
 
