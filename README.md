@@ -1,145 +1,146 @@
 # cmux-gtk
 
-GTK4/libadwaita terminal multiplexer for AI coding agents. Rust + Ghostty.
+**A GTK4/libadwaita terminal multiplexer built for running many AI coding agents at once.** Rust + [Ghostty](https://ghostty.org). A Linux port of [cmux](https://cmux.com), tracking its feature set.
 
-## Setup
+![cmux-gtk](docs/screenshots/hero.png)
+
+> **Note on the images below:** the screenshots and GIFs in `docs/` are currently **labeled placeholders**. See [`docs/CAPTURING.md`](docs/CAPTURING.md) for how to record real captures (a helper script is included) and drop them in to replace the placeholders.
+
+---
+
+## Install
 
 ```bash
 git submodule update --init
-cargo build --features cmux/link-ghostty
+cargo build --release --features cmux/link-ghostty
+sudo bash scripts/install.sh          # installs cmux-app + cmux CLI to /usr/local
 ```
 
-## Build
+Browser support (WebKit6) is on by default; build without it via `--no-default-features --features cmux/link-ghostty`.
 
-```bash
-cargo check          # Type check
-cargo test           # Run tests
-cargo build          # Debug build
-cargo build --release # Release build
-```
+---
 
-Browser support (WebKit6) is enabled by default. To build without it:
+## Highlights
 
-```bash
-cargo build --release --no-default-features --features cmux/link-ghostty
-```
+### Run a fleet of agents, see them all at a glance
 
-## Features
+**Pane Overview** — a status grid of every pane in the workspace: busy / idle / attention dots (detected from each pane's foreground process), a one-line activity snippet, and click-to-jump. Open it from the header grid button, the palette, or a configurable shortcut.
 
+![Pane Overview](docs/screenshots/pane-overview.png)
+
+### Agent integrations — teammates as native panes
+
+`cmux claude-teams` (Claude Code agent-teams) and `cmux omo` (OpenCode / oh-my-openagent) launch agents whose teammates and subagents open as **native cmux panes**. A private tmux shim translates `split-window` / `send-keys` / `capture-pane` → cmux's `surface.split` / `send_text` / `read_text`, and `terminal-notifier` → `cmux notify` — no real tmux required.
+
+![Agent integrations](docs/screenshots/agent-integrations.png)
+
+### Drag tabs & move panes
+
+Drag a tab to **reorder** it, drop it on a pane edge to **split**, or drop it on a sidebar workspace to **move it across workspaces**. Panes rearrange live.
+
+![Dragging tabs](docs/demos/drag-tabs.gif)
+![Moving panes](docs/demos/move-panes.gif)
+
+### History & Vault
+
+| | |
+|---|---|
+| **History** — `cmux history` opens a searchable, day-grouped list of recently closed & focused workspaces; click to reopen. Closed history persists across restarts. | **Vault** — `cmux vault` indexes past Claude Code / Codex sessions with title/dir/preview search; click a session to resume it in a terminal. |
+| ![History pane](docs/screenshots/history-pane.png) | ![Vault pane](docs/screenshots/vault-pane.png) |
+
+### Dock — always-on terminal controls
+
+A right-side column of small terminal "controls" (lazygit, log tails, build watchers) defined in `.cmux/dock.json` or `~/.config/cmux/dock.json`. Edit them from a GUI (**Settings → Dock → Edit Dock Controls**). Hidden by default; toggle from the header.
+
+| Dock | Dock editor |
+|---|---|
+| ![Dock](docs/screenshots/dock.png) | ![Dock editor](docs/screenshots/dock-editor.png) |
+
+### TextBox — compose prompts before sending
+
+An opt-in multi-line input below a terminal for composing multi-line agent prompts. Enter sends, Shift+Enter adds a newline, Esc returns to the terminal.
+
+![TextBox](docs/screenshots/textbox.png)
+
+### Finder previews & Task Manager
+
+| Finder previews | Task Manager |
+|---|---|
+| Inline **image, video, and PDF** previews (PDF rendered page-by-page via poppler) — ideal for reviewing screenshots and demo recordings agents produce. | `cmux top` opens a CPU/RAM monitor for the agent & terminal processes in your workspaces. |
+| ![Finder previews](docs/screenshots/pdf-preview.png) | ![Task Manager](docs/screenshots/task-manager.png) |
+
+### Command palette & custom commands
+
+Fuzzy command palette and workspace switcher. Define your own entries in `cmux.json` (project `.cmux/cmux.json`, project root, or global) that run a shell command **or** open a whole multi-pane `workspace` layout.
+
+![Command palette](docs/screenshots/command-palette.png)
+
+---
+
+## All features
+
+### Workspaces, panes & windows
 - **Terminal multiplexer** — workspaces, split panes, tab management, directional focus
-- **Integrated browser** — WebKit6 panels with 120+ automation commands (Playwright-style API)
-- **Shell integration** — auto-injected via ZDOTDIR/BASH_ENV/XDG_DATA_DIRS (zsh/bash/fish); CWD, git branch, PR polling, semantic prompts
-- **Remote SSH workspaces** — `cmux ssh user@host` with auto-bootstrap daemon, SOCKS5 proxy tunnel for browser traffic, CLI relay for remote cmux commands, sidebar connection indicators
-- **Session persistence** — scrollback, geometry, zoom, URLs, browser back/forward history restored on restart
-- **Socket API** — V1 text (60 commands) + V2 JSON-RPC protocol (210+ methods) for automation
-- **CLI wrapper** — `cmux/bin/cmux` shell script for quick socket interaction
-- **Claude Code wrapper** — `cmux/bin/claude` injects hooks for status/notifications in sidebar
-- **URL routing** — `cmux/bin/xdg-open` intercepts HTTP(S) URLs to cmux in-app browser
-- **Command palette** — 50+ commands, fuzzy search, workspace switcher
-- **All-surfaces search** — Ctrl+P to search text across all terminals
-- **Omnibar** — inline ghost text completion, switch-to-tab suggestions, search engine fallback (Google, DuckDuckGo, Bing, Kagi, Startpage)
-- **Sidebar metadata** — status pills, rich metadata entries, markdown blocks, progress bars, log entries, PR check icons, hide-all-details toggle, vertical branch layout, help menu
-- **Notification sounds** — freedesktop theme sound presets (7 presets + custom file), desktop notifications
-- **OSC notifications** — OSC 9/777 triggers desktop notifications with pane attention ring
-- **Browser profiles** — per-profile isolated NetworkSession with persistent cookies
-- **Browser history** — frecency-scored history with omnibar autocomplete
-- **Browser navigation** — window.open/target=_blank → new tab, Ctrl+click/middle-click → new tab, mouse back/forward side buttons (8/9), deep link handling (custom URI schemes → xdg-open), insecure HTTP interstitial with allowlist
-- **Browser tab controls** — per-tab audio mute, distraction-free focus mode (hide chrome, Esc to exit), React component grab (`browser.react_grab`)
-- **Browser theme mode** — separate System/Light/Dark override with toolbar toggle and settings
-- **Browser security** — user agent override (Safari-compatible), camera/mic/geo permission denial by default, context menu customization, input sanitization
-- **Link routing** — configurable URL patterns for system vs cmux browser, HTTP allowlist
-- **Keyboard copy mode** — Ghostty vi-style navigation with vim badge indicator
-- **Ghostty config** — reads `~/.config/ghostty/config` for themes, fonts, colors, background opacity, unfocused split opacity, and split divider color; live reload via Ctrl+Shift+,
-- **Right-click context menu** — Copy and Paste actions on terminal panels
-- **File drag-and-drop** — drop files from file manager onto terminal to paste shell-escaped paths
-- **Omarchy themes** — colors.toml parsing with SIGUSR2 live reload
-- **tmux compatibility** — CLI shim maps tmux commands (split-window, send-keys, capture-pane, etc.) to cmux socket API for tool compatibility
-- **Theme browser** — `cmux themes [filter]` lists bundled ghostty themes from system and user directories
-- **Move tabs** — drag a tab onto another pane to move it; drag onto a pane edge (right/left → horizontal split, bottom/top → vertical split); or onto a sidebar workspace row to move it to another workspace
-- **Reopen closed workspace** — `cmux reopen` / command palette restores the most recently closed workspace (layout + cwd, fresh shells)
-- **Reopen closed tab** — `cmux reopen-tab` / palette "Reopen Closed Tab" restores the most recently closed panel in the current workspace (type/dir/command preserved, fresh shell); configurable `tab.reopen` shortcut
-- **Multi-window** — workspaces assignable across windows
-- **Display placement** — `cmux window displays` lists monitors; `cmux window display <name|index>` moves the window to a monitor (fullscreens it — Wayland forbids windowed repositioning)
-- **Focus history** — back/forward navigation through recently-focused workspaces (`cmux back`/`cmux forward`, command palette, `workspace.focus_back/forward` socket)
-- **Remote reconnect** — inline Reconnect button on remote workspace rows when disconnected/errored; auto-reconnect runs once on restore then waits for manual retry (no retry storm when a host is unreachable)
+- **Move tabs & panes** — drag a tab to reorder, split a pane (drop on an edge), or move it to another workspace; break/join panes across workspaces
+- **New tab** — `Ctrl+Shift+T` opens a new terminal in the current pane, inheriting the focused terminal's working directory
+- **Pane overview** — status grid of every pane (busy/idle/attention) with click-to-jump (header button / palette / `overview.open`)
+- **Multi-window** — single-instance app; launching again opens a new window, workspaces assignable across windows
+- **Workspace groups** — collapsible sidebar sections with per-group color, unread badges, drag-anchored membership, persistence (`cmux group`)
 - **Workspace management** — pinning, custom colors, reorder, close-others/above/below
-- **Agent hibernation** — pause (SIGSTOP) an idle agent in a workspace to free CPU and resume (SIGCONT) on demand; sidebar pause indicator, `cmux hibernate`/`wake`, context menu
-- **Workspace groups** — collapsible sidebar sections with per-group color, unread badges, drag-anchored membership, session persistence, and `cmux group` CLI / `workspace.group.*` socket commands
-- **Diff viewer** — `cmux diff [path]` opens a git diff CodeView panel (colored add/remove/hunk lines, working-tree/staged toggle, reload); plain-GTK so it works without WebKit
-- **Project visualizer** — `cmux project [path]` opens a structure pane: bounded directory tree (skips .git/node_modules/target/…) plus a file-type/size summary; plain-GTK, no WebKit
-- **`cmux open <path-or-url>...`** — opens files in a viewer (markdown → markdown panel, else → file-preview panel), directories as new workspaces, and URLs in a browser split (`file.open` socket method)
-- **Notes scratchpad** — `cmux notes [file]` opens an editable, auto-saved notes panel
-- **Finder previews** — the file-preview panel renders images (`Picture`) and videos (`Video`) inline, not just text — ideal for reviewing screenshots and demo videos agents produce
-- **History pane** — `cmux history` opens a searchable, day-grouped list of recently closed workspaces (click to reopen, "Clear Closed") plus recently focused workspaces
-- **Vault pane** — `cmux vault` indexes past Claude Code / Codex sessions (`~/.claude/projects`, `~/.codex/sessions`) with title/dir/preview search; click a session to resume it in a terminal
-- **Task Manager** — `cmux top` opens the CPU/RAM monitor for agent/terminal processes (also Ctrl+Shift+A / command palette); `cmux ps` prints the same as JSON
-- **Agent integrations** — `cmux claude-teams` (Claude Code agent-teams) and `cmux omo` (OpenCode / oh-my-openagent) launch agents whose teammates/subagents open as native cmux panes. A private tmux shim translates `split-window`/`send-keys`/`capture-pane` → `surface.split`/`send_text`/`read_text`, and `terminal-notifier` → `cmux notify` — no real tmux required
-- **TextBox** — opt-in prompt composer below terminals (Settings → TextBox): a multi-line input where Enter sends the composed text to the terminal, Shift+Enter adds a newline, Escape returns to the terminal
-- **Dock** — right-side column of terminal "controls" (lazygit, log tails, watchers) from `.cmux/dock.json` / `~/.config/cmux/dock.json` (`id`/`title`/`command`/`cwd`/`height`); toggle with the header-bar Dock button or the command palette
-- **Custom commands** — `cmux.json` (project `.cmux/cmux.json`, project root, or global `~/.config/cmux/cmux.json`) defines command-palette entries with `name`/`keywords`/`confirm` that either run a shell command in the focused terminal or open a multi-pane `workspace` layout (recursive `split`/`pane`/`surfaces` tree with per-pane `command`, `cwd`, `url`, and `focus`)
-- **Diff sources** — `cmux diff --staged` / `--branch <ref>` select what the diff viewer shows; `cmux read --scrollback --lines N` reads terminal history
-- **Welcome screen** — first-launch getting-started tips
+- **Focus history** — back/forward through recently-focused workspaces (`cmux back`/`forward`)
+- **Reopen closed workspace** — `cmux reopen` restores the most recently closed workspace (layout + cwd, fresh shells)
+- **Reopen closed tab** — `cmux reopen-tab` restores the most recently closed panel in the current workspace (type/dir/command preserved)
+- **Agent hibernation** — pause (SIGSTOP) an idle agent to free CPU and resume (SIGCONT) on demand (`cmux hibernate`/`wake`)
+- **Display placement** — `cmux window displays` / `cmux window display <name|index>` moves the window to a monitor
 
-## Architecture
+### Panels
+- **Terminal** — Ghostty-backed GL surfaces with vi-style copy mode and a vim badge indicator
+- **Integrated browser** — WebKit6 panels with 120+ automation commands (Playwright-style API), profiles, history, focus mode
+- **Markdown viewer** — `cmux open file.md` / drag from the sidebar
+- **Diff viewer** — `cmux diff [path]` git diff CodeView (`--staged` / `--branch <ref>`); plain-GTK, no WebKit
+- **Project visualizer** — `cmux project [path]` directory tree + file-type/size summary
+- **Finder previews** — inline image / video / **PDF** (poppler) previews in the file-preview panel
+- **Notes scratchpad** — `cmux notes [file]` editable, auto-saved; path configurable in Settings
+- **History pane** — `cmux history` searchable day-grouped closed/focused workspaces
+- **Vault pane** — `cmux vault` searchable index of past Claude Code / Codex sessions, click to resume
 
-- `ghostty-sys/` — Raw FFI bindings to libghostty C API (`ghostty.h`)
-- `ghostty-gtk/` — Safe Rust wrapper: GhosttyApp, GhosttyGlSurface, key mapping
-- `cmux/` — Main application (GTK4/libadwaita)
-  - `app.rs` — AppState, SharedState, terminal surface lifecycle, window management
-  - `model/` — TabManager, Workspace, Panel, LayoutNode
-  - `ui/` — Window, Sidebar, SplitView, TerminalPanel, BrowserPanel, MarkdownPanel, CommandPalette, Omnibar, SearchOverlay, AllSurfacesSearch, NotificationsPanel, Welcome, Settings
-  - `socket/` — Unix socket server, V1 text protocol, V2 JSON protocol, browser automation, auth
-  - `session/` — Session persistence (XDG, JSON compatible with macOS cmux)
-  - `settings/` — AppSettings, ShortcutConfig, SidebarDisplay, Notifications, LinkRouting
-  - `remote/` — Remote SSH workspaces (bootstrap, proxy tunnel, RPC, CLI relay)
-  - `notifications.rs` — Notification store, desktop notifications, sound playback
-  - `browser_history.rs` — Frecency-scored browser history with search
-  - `browser_profiles.rs` — Per-profile WebKit NetworkSession isolation
-  - `ghostty_config.rs` — Reads ghostty config for themes, colors, opacity
-  - `port_scanner.rs` — Port detection for sidebar display
-- `cmux/bin/cmux` — CLI wrapper script (socket auto-discovery, ncat/socat/nc transport, claude-hook subcommand)
-- `cmux/bin/claude` — Claude Code wrapper (session hooks, status reporting)
-- `cmux/bin/xdg-open` — URL routing wrapper (HTTP(S) → cmux browser, fallback to system)
-- `cmux/shell-integration/` — Auto-injected zsh/bash/fish integration scripts
+### AI agent workflow
+- **Agent integrations** — `cmux claude-teams` & `cmux omo` open teammates/subagents as native panes via a tmux shim; `terminal-notifier` → `cmux notify`
+- **Task Manager** — `cmux top` CPU/RAM monitor (also `cmux ps` for JSON)
+- **TextBox** — multi-line prompt composer below terminals (opt-in)
+- **Dock** — right-side terminal controls from `dock.json`, with a GUI editor
+- **Custom commands** — `cmux.json` palette entries: shell commands or multi-pane `workspace` layouts (recursive `split`/`pane`/`surfaces` with per-surface `command`/`cwd`/`url`/`focus`)
+- **Sidebar metadata** — status pills, metadata blocks, progress bars, log entries, PR check icons, hide-all-details toggle
+- **Notifications** — OSC 9/777 desktop notifications with pane attention ring; freedesktop sound presets
 
-## Architecture Review
+### Browser
+- 120+ `browser.*` automation commands (Playwright-style)
+- Per-profile isolated NetworkSession with persistent cookies; cookie import
+- Frecency-scored history with omnibar autocomplete
+- `window.open`/`target=_blank` → new tab, Ctrl/middle-click → new tab, mouse 8/9 back/forward, deep-link handling, HTTP interstitial with allowlist
+- Per-tab audio mute, distraction-free focus mode, React component grab
+- System/Light/Dark theme override; UA override, camera/mic/geo denied by default
 
-**Read `docs/architecture-review.md` before making structural changes.**
-It documents the Ghostty integration constraints and architectural decisions.
+### CLI & automation
+- **Socket API** — V1 text (60 commands) + V2 JSON-RPC (210+ methods)
+- **CLI wrapper** — `cmux/bin/cmux <command>` (socket auto-discovery)
+- **tmux compatibility** — CLI shim maps tmux commands to the socket API
+- **Claude Code wrapper** — `cmux/bin/claude` injects status/notification hooks
+- **URL routing** — `cmux/bin/xdg-open` routes HTTP(S) to the in-app browser
 
-## Shell Integration
+### Integration & platform
+- **Shell integration** — auto-injected (zsh/bash/fish): CWD, git branch, PR polling, semantic prompts
+- **Remote SSH workspaces** — `cmux ssh user@host` with auto-bootstrap daemon, SOCKS5 proxy tunnel for browser traffic, CLI relay
+- **Session persistence** — scrollback, geometry, zoom, URLs, browser history, closed-tab history restored on restart
+- **Ghostty config** — reads `~/.config/ghostty/config` (themes, fonts, colors, opacity); live reload via `Ctrl+Shift+,`
+- **Themes** — `cmux themes [filter]`; Omarchy `colors.toml` with SIGUSR2 live reload
+- **App icon** — installed into the hicolor theme (SVG + 32–256px PNG) with a pixmaps fallback
 
-cmux auto-injects shell integration via:
-- **Zsh**: ZDOTDIR override → `.zshenv` bootstrap → sources integration, restores user ZDOTDIR
-- **Bash**: BASH_ENV → sources integration script (PS0 preexec on Bash 4.4+)
-- **Fish**: XDG_DATA_DIRS prepend → fish auto-sources `fish/vendor_conf.d/cmux.fish` (deferred setup on first prompt; non-invasive, preserves existing XDG_DATA_DIRS)
+---
 
-Features: CWD reporting, fast git HEAD resolution (no fork), async git branch detection (3s throttle, background subshell), async git HEAD watcher during commands, smart PR polling with `gh` CLI (45s interval, 20s timeout, transient failure resilience), port scanning, semantic prompt markers (OSC 133 with `redraw=last;cl=line`), scrollback restoration, prompt wrap guard (zsh), WINCH guard (zsh), PATH prepend for cmux CLI, recursive process tree cleanup on exit.
+## Keyboard shortcuts
 
-## Socket Protocol
-
-Unix socket at `$XDG_RUNTIME_DIR/cmux.sock` (falls back to `/tmp/cmux-$UID.sock`).
-
-**V1 text protocol** — 60 line-delimited text commands for shell integration and CLI use.
-**V2 JSON-RPC protocol** — 210+ methods for programmatic automation.
-**Browser automation** — 120+ `browser.*` commands (Playwright-style API).
-
-Use the CLI wrapper: `cmux/bin/cmux <command> [args...]`
-
-`surface.send_key` supports all standard key names: `Return`, `Escape`, `Tab`, `Backspace`, `Delete`, `Space`, arrow keys (`Up`, `Down`, `Left`, `Right`), `Home`, `End`, `Page_Up`, `Page_Down`, `Insert`, `F1`–`F12`, and single printable ASCII characters.
-
-## Ghostty Integration
-
-The `link-ghostty` feature enables actual FFI linking to libghostty.
-Without it (default), the crates compile in stub mode for development.
-
-To build with ghostty:
-1. Initialize the ghostty submodule
-2. Build with `cargo build --features cmux/link-ghostty`
-
-## Keyboard Shortcuts
-
-All shortcuts are configurable via `~/.config/cmux/shortcuts.json`.
+All shortcuts are configurable via `~/.config/cmux/shortcuts.json` (or **Settings → Keyboard**).
 
 | Shortcut | Action |
 |----------|--------|
@@ -147,76 +148,70 @@ All shortcuts are configurable via `~/.config/cmux/shortcuts.json`.
 | Ctrl+Shift+N | New window |
 | Ctrl+Shift+W | Close workspace |
 | Ctrl+Shift+Q | Close focused pane |
-| Ctrl+Shift+D | Split horizontally |
-| Ctrl+Shift+E | Split vertically |
+| Ctrl+Shift+D / E | Split horizontally / vertically |
 | Ctrl+Shift+P | Command palette |
 | Ctrl+P | Search all terminals |
-| Ctrl+F | Find in terminal |
-| Ctrl+G | Find next match |
-| Ctrl+Shift+G | Find previous match |
-| Ctrl+E | Use selection for find |
-| Ctrl+Shift+I | Toggle notifications |
+| Ctrl+F / G / Shift+G | Find / next / previous |
 | Ctrl+Shift+B | Toggle sidebar |
-| Ctrl+Shift+H | Flash focused pane |
-| Ctrl+Shift+R | Rename workspace |
 | Ctrl+Shift+Z | Toggle pane zoom |
 | Ctrl+Shift+M | Enter copy mode |
-| Ctrl+Shift+Y | Reopen closed browser tab |
 | Ctrl+Shift+U | Jump to latest unread |
-| Ctrl+O | Open folder as new workspace |
-| Ctrl+Shift+O | Open workspace directory in file manager |
-| Ctrl+, | Settings |
-| Ctrl+Shift+, | Reload ghostty config |
-| Ctrl+K | Clear terminal scrollback |
-| Ctrl+=/- | Increase/decrease font size |
-| Ctrl+0 | Reset font size |
-| Ctrl+1-9 | Jump to workspace |
-| Ctrl+Tab | Next workspace |
-| Ctrl+Shift+Tab | Previous workspace |
-| Ctrl+Shift+Page Up/Down | Move workspace up/down |
+| Ctrl+1–9 | Jump to workspace |
+| Ctrl+Tab / Ctrl+Shift+Tab | Next / previous workspace |
 | Alt+Arrow | Focus pane in direction |
-| Ctrl+Shift+[/] | Focus previous/next pane |
-| Ctrl+Alt+D | Split browser horizontal |
-| Ctrl+Alt+E | Split browser vertical |
-| Ctrl+Alt+C | Toggle browser console |
-| Ctrl+Shift+Alt+W | Close other tabs in pane |
+| Ctrl+, | Settings |
 
-## Environment Variables
+**Configurable, unbound by default** (bind in Settings → Keyboard): `tab.reopen` (reopen closed tab), `textbox.focus`, `dock.toggle`, `overview.open`. These are unbound because, with a terminal focused, ghostty's Kitty keyboard protocol encodes `Ctrl+Shift+<key>` to the shell before cmux sees it — so the **header buttons and command palette are the reliable triggers** for the Dock and Overview.
+
+---
+
+## Configuration files
+
+| File | Purpose |
+|------|---------|
+| `~/.config/cmux/settings.json` (or `cmux.json`) | App settings |
+| `~/.config/cmux/shortcuts.json` | Keybindings |
+| `.cmux/cmux.json` / `cmux.json` / `~/.config/cmux/cmux.json` | Custom commands (`commands[]`, optional `workspace` layouts) |
+| `.cmux/dock.json` / `~/.config/cmux/dock.json` | Dock controls (`id`/`title`/`command`/`cwd`/`height`) |
+
+---
+
+## Architecture
+
+- `ghostty-sys/` — Raw FFI bindings to libghostty (`ghostty.h`)
+- `ghostty-gtk/` — Safe Rust wrapper: GhosttyApp, GhosttyGlSurface, key mapping
+- `cmux/` — Main application (GTK4/libadwaita)
+  - `app.rs` — AppState, SharedState, terminal surface lifecycle, window management
+  - `model/` — TabManager, Workspace, Panel, LayoutNode
+  - `ui/` — window, sidebar, split view, terminal/browser/markdown/diff/project/file-preview/notes/history/vault panels, dock, textbox, pane overview, command palette, settings
+  - `socket/` — Unix socket server, V1 text + V2 JSON protocols, browser automation, auth
+  - `session/` — session persistence (XDG, JSON compatible with macOS cmux)
+  - `settings/` — AppSettings, ShortcutConfig, custom commands
+  - `remote/` — remote SSH workspaces (bootstrap, proxy tunnel, RPC, CLI relay)
+- `cmux/bin/` — `cmux` (CLI), `claude` (hook wrapper), `xdg-open` (URL routing)
+- `cmux/shell-integration/` — auto-injected zsh/bash/fish integration scripts
+
+**Read `docs/architecture-review.md` before making structural changes** — it documents the Ghostty integration constraints.
+
+---
+
+## Socket protocol
+
+Unix socket at `$XDG_RUNTIME_DIR/cmux.sock` (falls back to `/tmp/cmux-$UID.sock`). V1 text (60 commands) + V2 JSON-RPC (210+ methods) + 120+ `browser.*` automation commands. Use `cmux/bin/cmux <command> [args...]`.
+
+## Environment variables
 
 | Variable | Description |
 |----------|-------------|
 | `CMUX_SOCKET` | Override socket path |
 | `CMUX_DISABLE_SESSION_RESTORE` | Set to `1` to skip session restore |
-| `CMUXD_PROXY_ALLOW_PRIVATE` | Set to `1` on the **remote host** to allow the SOCKS5 proxy to connect to private/loopback IPs (e.g., a dev server on port 3000) |
-
-## Remote SSH Workspaces
-
-Connect to remote hosts via SSH with a full cmux workspace (terminal + browser via proxy tunnel).
-
-1. **Enable in Settings** — Remote SSH is disabled by default. Toggle "Remote SSH Workspaces" in Settings > Behavior.
-2. **Create via Command Palette** — `Ctrl+Shift+P` → "New SSH Workspace..." → enter `user@host`.
-3. **Or via socket API** — `workspace.create_ssh {"destination": "user@host"}`.
-4. **Sidebar shows connection state** — icons indicate Connecting, Connected, Disconnected, or Error.
-
-The remote daemon (`cmuxd-remote`) is bootstrapped automatically on the remote host. It provides a SOCKS5 proxy tunnel for browser traffic and a JSON-RPC API for workspace control.
+| `CMUXD_PROXY_ALLOW_PRIVATE` | Set to `1` on the **remote host** to allow the SOCKS5 proxy to reach private/loopback IPs |
 
 ## Security
 
-See [docs/security.md](docs/security.md) for the full security architecture.
-
-Key measures:
-- **Socket authentication** via kernel `SO_PEERCRED` (UID/PID verification) with 5 control modes
-- **HMAC-SHA256** relay authentication (native Rust `hmac`+`sha2`, no subprocess)
-- **File permissions** — all config/session/history files written with 0o600, directories 0o700
-- **Input validation** — all socket inputs truncated, browser event types whitelisted
-- **FFI safety** — all `unsafe` blocks documented with SAFETY comments, panic guards on all FFI callbacks
-- **Integer overflow checks** enabled in release builds
-- **Browser sandboxing** — camera/mic/geo denied by default, `javascript:` scheme blocked, deep link schemes whitelisted, download path traversal prevented, HTTP interstitial XSS-safe
-- **SSRF denylist** — proxy tunnel blocks loopback, link-local, RFC-1918, and cloud metadata IPs
-- **Scrollback privacy** — `persist_scrollback` setting (default: on) controls whether terminal history is included in session snapshots
-- **`cargo audit`** in CI for dependency vulnerability scanning
+See [docs/security.md](docs/security.md). Socket auth via `SO_PEERCRED`, HMAC-SHA256 relay auth, 0o600/0o700 file perms, input validation, documented `unsafe` with panic guards, SSRF denylist on the proxy tunnel, `cargo audit` in CI.
 
 ## Reference
 
 - ghostty C API: `ghostty.h` in the ghostty submodule
-- Ghostty GTK runtime: `ghostty/src/apprt/gtk/` (reference for GL/input integration)
+- Ghostty GTK runtime: `ghostty/src/apprt/gtk/`
