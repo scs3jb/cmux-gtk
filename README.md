@@ -57,6 +57,7 @@ cargo build --release --no-default-features --features cmux/link-ghostty
 - **Theme browser** — `cmux themes [filter]` lists bundled ghostty themes from system and user directories
 - **Move tabs** — drag a tab onto another pane to move it; drag onto a pane edge (right/left → horizontal split, bottom/top → vertical split); or onto a sidebar workspace row to move it to another workspace
 - **Reopen closed workspace** — `cmux reopen` / command palette restores the most recently closed workspace (layout + cwd, fresh shells)
+- **Reopen closed tab** — `cmux reopen-tab` / palette "Reopen Closed Tab" restores the most recently closed panel in the current workspace (type/dir/command preserved, fresh shell); configurable `tab.reopen` shortcut
 - **Multi-window** — workspaces assignable across windows
 - **Display placement** — `cmux window displays` lists monitors; `cmux window display <name|index>` moves the window to a monitor (fullscreens it — Wayland forbids windowed repositioning)
 - **Focus history** — back/forward navigation through recently-focused workspaces (`cmux back`/`cmux forward`, command palette, `workspace.focus_back/forward` socket)

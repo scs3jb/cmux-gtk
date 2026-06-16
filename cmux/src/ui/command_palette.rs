@@ -260,6 +260,7 @@ fn build_actions(state: &Rc<AppState>) -> Rc<Vec<PaletteAction>> {
         cmd("surface.clear_history", "Clear Scrollback History"),
         cmd("pane.equalize", "Equalize Splits"),
         cmd("tab.close", "Close Tab"),
+        cmd("tab.reopen", "Reopen Closed Tab"),
         cmd("tab.rename", "Rename Tab"),
         cmd("tab.next_in_pane", "Next Tab in Pane"),
         cmd("tab.prev_in_pane", "Previous Tab in Pane"),
@@ -909,6 +910,12 @@ fn execute_action(name: &str, state: &Rc<AppState>, on_refresh: &Rc<dyn Fn()>) {
                 if let Some(panel_id) = ws.focused_panel_id {
                     ws.remove_panel(panel_id);
                 }
+            }
+        }
+        "tab.reopen" => {
+            let mut tm = lock_or_recover(&state.shared.tab_manager);
+            if let Some(ws) = tm.selected_mut() {
+                ws.reopen_last_closed_panel();
             }
         }
         "tab.rename" => {

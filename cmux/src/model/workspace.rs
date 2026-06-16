@@ -74,6 +74,9 @@ pub struct Workspace {
     /// When true, render log entries and metadata blocks as chat bubbles
     /// (iMessage-style conversation layout) in the sidebar detail area.
     pub imessage_mode: bool,
+    /// Recently-closed panels (most recent last) for "reopen closed tab".
+    /// Session-scoped (not persisted).
+    pub closed_panels: Vec<Panel>,
 }
 
 /// Individual PR check result.
@@ -154,6 +157,9 @@ pub fn truncate_str(s: &str, max_bytes: usize) -> &str {
     &s[..end]
 }
 
+/// Maximum recently-closed panels retained per workspace for reopen.
+const CLOSED_PANELS_CAP: usize = 10;
+
 impl Workspace {
     /// Create a new workspace with a single terminal panel.
     pub fn new() -> Self {
@@ -193,6 +199,7 @@ impl Workspace {
             remote_config: None,
             remote_state: None,
             imessage_mode: false,
+            closed_panels: Vec::new(),
         }
     }
 
@@ -277,8 +284,14 @@ impl Workspace {
 
     /// Remove a panel by ID. Returns true if the panel existed.
     pub fn remove_panel(&mut self, panel_id: Uuid) -> bool {
-        if self.panels.remove(&panel_id).is_none() {
+        let Some(panel) = self.panels.remove(&panel_id) else {
             return false;
+        };
+        // Record for "reopen closed tab" (most recent last, capped).
+        self.closed_panels.push(panel);
+        if self.closed_panels.len() > CLOSED_PANELS_CAP {
+            let drop = self.closed_panels.len() - CLOSED_PANELS_CAP;
+            self.closed_panels.drain(0..drop);
         }
         self.layout.remove_panel(panel_id);
 
@@ -288,6 +301,30 @@ impl Workspace {
         }
 
         true
+    }
+
+    /// Reopen the most recently closed panel as a tab in the focused pane.
+    /// Returns the reopened panel ID. Terminals get a fresh shell (live process
+    /// state isn't captured), but the panel's type/dir/command are restored.
+    pub fn reopen_last_closed_panel(&mut self) -> Option<Uuid> {
+        let mut panel = self.closed_panels.pop()?;
+        // Fresh identity + no stale runtime state.
+        panel.id = Uuid::new_v4();
+        panel.pending_scrollback = None;
+        panel.tty_name = None;
+        let new_id = panel.id;
+        self.panels.insert(new_id, panel);
+        let target = self
+            .focused_panel_id
+            .or_else(|| self.layout.all_panel_ids().into_iter().next());
+        if let Some(target) = target {
+            self.layout.add_panel_to_pane(target, new_id);
+        } else {
+            self.layout = LayoutNode::single_pane(new_id);
+        }
+        self.previous_focused_panel_id = self.focused_panel_id;
+        self.focused_panel_id = Some(new_id);
+        Some(new_id)
     }
 
     /// Detach a panel from the workspace, returning it.
@@ -859,6 +896,25 @@ mod tests {
         let new_id = ws.split(SplitOrientation::Horizontal, PanelType::Terminal);
         assert!(ws.remove_panel(new_id));
         assert_eq!(ws.panels.len(), 1);
+    }
+
+    #[test]
+    fn test_reopen_closed_tab() {
+        let mut ws = Workspace::new();
+        let new_id = ws.split(SplitOrientation::Horizontal, PanelType::Terminal);
+        assert_eq!(ws.panels.len(), 2);
+        ws.remove_panel(new_id);
+        assert_eq!(ws.panels.len(), 1);
+        assert_eq!(ws.closed_panels.len(), 1);
+
+        let reopened = ws.reopen_last_closed_panel().expect("a reopened panel");
+        assert_eq!(ws.panels.len(), 2);
+        assert_eq!(ws.closed_panels.len(), 0);
+        assert_eq!(ws.focused_panel_id, Some(reopened));
+        // Fresh identity (not the original id).
+        assert_ne!(reopened, new_id);
+        // Nothing left to reopen.
+        assert!(ws.reopen_last_closed_panel().is_none());
     }
 
     #[test]

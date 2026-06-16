@@ -166,6 +166,7 @@ pub fn dispatch(json_line: &str, state: &Arc<SharedState>) -> Response {
         "workspace.focus_back" => workspace::handle_workspace_focus_back(id, state),
         "workspace.focus_forward" => workspace::handle_workspace_focus_forward(id, state),
         "workspace.reopen_closed" => workspace::handle_workspace_reopen_closed(id, state),
+        "workspace.reopen_closed_tab" => workspace::handle_workspace_reopen_closed_tab(id, state),
         "workspace.open_history" => workspace::handle_workspace_open_history(id, state),
         "workspace.open_vault" => workspace::handle_workspace_open_vault(id, state),
         "workspace.hibernate" => workspace::handle_workspace_hibernate(id, &req.params, state),

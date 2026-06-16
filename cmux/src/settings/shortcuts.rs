@@ -70,6 +70,9 @@ impl Default for ShortcutConfig {
         bindings.insert("tab.new".into(), Some(Keybinding::ctrl_shift("T")));
         // Focus the TextBox composer (unbound by default; set in Settings).
         bindings.insert("textbox.focus".into(), None);
+        // Reopen the most recently closed tab (unbound by default — ghostty
+        // owns Ctrl+Shift+T; set a key in Settings if desired).
+        bindings.insert("tab.reopen".into(), None);
         // Toggle the Dock panel. Unbound by default: with a terminal focused,
         // ghostty's Kitty keyboard protocol encodes Ctrl+Shift+<key> and sends
         // it to the shell before cmux sees it, so use the header button or the

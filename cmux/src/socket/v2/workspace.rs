@@ -667,6 +667,22 @@ fn open_side_panel(id: Value, state: &Arc<SharedState>, panel: crate::model::Pan
     }
 }
 
+/// `workspace.reopen_closed_tab` (`cmux reopen-tab`) — reopen the most recently
+/// closed tab in the active workspace.
+pub(super) fn handle_workspace_reopen_closed_tab(id: Value, state: &Arc<SharedState>) -> Response {
+    let reopened = {
+        let mut tm = lock_or_recover(&state.tab_manager);
+        tm.selected_mut().and_then(|ws| ws.reopen_last_closed_panel())
+    };
+    match reopened {
+        Some(panel_id) => {
+            state.notify_ui_refresh();
+            Response::success(id, serde_json::json!({"panel_id": panel_id.to_string()}))
+        }
+        None => Response::error(id, "empty", "No recently closed tab to reopen"),
+    }
+}
+
 pub(super) fn handle_workspace_reopen_closed(id: Value, state: &Arc<SharedState>) -> Response {
     let reopened = {
         let mut tm = lock_or_recover(&state.tab_manager);

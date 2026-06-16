@@ -394,6 +394,7 @@ Workspaces
   rename <name>              Rename the current workspace
   close [id]                 Close a workspace
   reopen                     Reopen the most recently closed workspace
+  reopen-tab                 Reopen the most recently closed tab (this workspace)
   history                    Open the History pane (closed/focused workspaces)
   vault                      Open the Vault pane (search & resume agent sessions)
   next | prev | last         Switch workspace
@@ -651,6 +652,7 @@ case "$command" in
   reopen)
     _cmux_act "reopen"
     ;;
+  reopen-tab) _cmux_json "workspace.reopen_closed_tab" "{}" ;;
   history) _cmux_json "workspace.open_history" "{}" ;;
   vault) _cmux_json "workspace.open_vault" "{}" ;;
   back)

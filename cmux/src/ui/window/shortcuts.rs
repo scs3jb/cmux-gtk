@@ -59,6 +59,7 @@ pub(super) fn setup_shortcuts(
                 "notification.defer_unread",
                 "notification.toggle_unread",
                 "tab.new",
+                "tab.reopen",
                 "textbox.focus",
                 "dock.toggle",
                 "close.tab",
@@ -101,6 +102,16 @@ pub(super) fn setup_shortcuts(
                                         }
                                         ws.previous_focused_panel_id = ws.focused_panel_id;
                                         ws.focused_panel_id = Some(new_id);
+                                    }
+                                }
+                                super::refresh_ui(&list_box, &content_box, &state);
+                            }
+                            // Reopen the most recently closed tab.
+                            "tab.reopen" => {
+                                {
+                                    let mut tm = lock_or_recover(&state.shared.tab_manager);
+                                    if let Some(ws) = tm.selected_mut() {
+                                        ws.reopen_last_closed_panel();
                                     }
                                 }
                                 super::refresh_ui(&list_box, &content_box, &state);
