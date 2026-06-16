@@ -68,6 +68,8 @@ impl Default for ShortcutConfig {
 
         // New tab (terminal) in the current pane.
         bindings.insert("tab.new".into(), Some(Keybinding::ctrl_shift("T")));
+        // Focus the TextBox composer (unbound by default; set in Settings).
+        bindings.insert("textbox.focus".into(), None);
 
         // Workspace management. `workspace.new` has no default key (Ctrl+Shift+T
         // opens a new tab); it's reachable via the palette / sidebar / `cmux new`.

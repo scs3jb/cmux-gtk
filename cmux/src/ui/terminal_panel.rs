@@ -155,6 +155,12 @@ fn create_terminal_widget(
     // picks up its new (possibly smaller) allocation from the GtkPaned.
     gl_surface.queue_resize();
 
+    // TextBox prompt-composer below the terminal (opt-in).
+    if crate::settings::load().show_textbox_on_new_terminals {
+        let textbox = super::textbox::create_textbox(panel.id, state);
+        container.append(&textbox);
+    }
+
     // Store the panel ID for later lookup
     container.set_widget_name(&panel.id.to_string());
 

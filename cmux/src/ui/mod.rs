@@ -21,5 +21,6 @@ pub mod sidebar;
 pub mod split_view;
 pub mod task_manager;
 pub mod terminal_panel;
+pub mod textbox;
 pub mod welcome;
 pub mod window;

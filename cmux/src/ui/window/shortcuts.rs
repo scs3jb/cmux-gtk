@@ -59,6 +59,7 @@ pub(super) fn setup_shortcuts(
                 "notification.defer_unread",
                 "notification.toggle_unread",
                 "tab.new",
+                "textbox.focus",
                 "close.tab",
                 "close.tab.others",
                 "find.in_directory",
@@ -102,6 +103,16 @@ pub(super) fn setup_shortcuts(
                                     }
                                 }
                                 super::refresh_ui(&list_box, &content_box, &state);
+                            }
+                            // Focus the TextBox composer of the focused panel.
+                            "textbox.focus" => {
+                                let panel_id = {
+                                    let tm = lock_or_recover(&state.shared.tab_manager);
+                                    tm.selected().and_then(|ws| ws.focused_panel_id)
+                                };
+                                if let Some(panel_id) = panel_id {
+                                    crate::ui::textbox::focus_textbox(panel_id);
+                                }
                             }
                             // Close the focused panel (browser-style Ctrl+W).
                             "close.tab" => {

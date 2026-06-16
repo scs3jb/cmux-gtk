@@ -411,6 +411,31 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
 
     appearance_page.add(&terminal_group);
 
+    // ── TextBox group ──
+    let textbox_group = adw::PreferencesGroup::new();
+    textbox_group.set_title("TextBox");
+    textbox_group.set_description(Some(
+        "A prompt composer below the terminal. Enter sends; Shift+Enter adds a newline.",
+    ));
+
+    let show_textbox_row = adw::SwitchRow::new();
+    show_textbox_row.set_title("Show TextBox on New Terminals");
+    show_textbox_row.set_active(current_settings.show_textbox_on_new_terminals);
+    textbox_group.add(&show_textbox_row);
+
+    let focus_textbox_row = adw::SwitchRow::new();
+    focus_textbox_row.set_title("Focus TextBox on New Terminals");
+    focus_textbox_row.set_subtitle("Place the cursor in the TextBox instead of the terminal");
+    focus_textbox_row.set_active(current_settings.focus_textbox_on_new_terminals);
+    textbox_group.add(&focus_textbox_row);
+
+    let textbox_lines_row = adw::EntryRow::new();
+    textbox_lines_row.set_title("TextBox Max Lines");
+    textbox_lines_row.set_text(&current_settings.textbox_max_lines.to_string());
+    textbox_group.add(&textbox_lines_row);
+
+    appearance_page.add(&textbox_group);
+
     window.add(&appearance_page);
 
     // ── Notifications page ──
@@ -1151,6 +1176,13 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
                 resume_command_approvals: current_settings.resume_command_approvals.clone(),
                 imessage_mode: current_settings.imessage_mode,
                 notes_path: notes_path_row.text().trim().to_string(),
+                show_textbox_on_new_terminals: show_textbox_row.is_active(),
+                focus_textbox_on_new_terminals: focus_textbox_row.is_active(),
+                textbox_max_lines: textbox_lines_row
+                    .text()
+                    .parse::<u32>()
+                    .unwrap_or(6)
+                    .clamp(1, 40),
                 shortcuts: shortcuts_state.borrow().clone(),
                 minimal_mode: current_settings.minimal_mode,
                 show_tab_close_button: show_tab_close_row.is_active(),

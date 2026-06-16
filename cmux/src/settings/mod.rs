@@ -75,6 +75,15 @@ pub struct AppSettings {
     /// (`$XDG_DATA_HOME/cmux/notes.md`). Supports a leading `~`.
     #[serde(default)]
     pub notes_path: String,
+    /// Show the TextBox prompt-composer below new terminals.
+    #[serde(default)]
+    pub show_textbox_on_new_terminals: bool,
+    /// Focus the TextBox (instead of the terminal) when a terminal is created.
+    #[serde(default)]
+    pub focus_textbox_on_new_terminals: bool,
+    /// Maximum visible lines in the TextBox before it scrolls.
+    #[serde(default = "default_textbox_max_lines")]
+    pub textbox_max_lines: u32,
     /// Keyboard shortcuts.
     #[serde(skip)]
     pub shortcuts: shortcuts::ShortcutConfig,
@@ -738,6 +747,10 @@ fn default_tint_opacity() -> f32 {
     0.85
 }
 
+fn default_textbox_max_lines() -> u32 {
+    6
+}
+
 fn default_resume_command_approvals() -> Vec<String> {
     vec![
         "claude --resume".to_string(),
@@ -791,6 +804,9 @@ impl Default for AppSettings {
             resume_command_approvals: default_resume_command_approvals(),
             imessage_mode: false,
             notes_path: String::new(),
+            show_textbox_on_new_terminals: false,
+            focus_textbox_on_new_terminals: false,
+            textbox_max_lines: default_textbox_max_lines(),
             shortcuts: shortcuts::ShortcutConfig::default(),
         }
     }
