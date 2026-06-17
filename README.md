@@ -40,6 +40,7 @@ Drag a tab to **reorder** it, drop it on a pane edge to **split**, or drop it on
 
 ![Dragging tabs](docs/demos/drag-tabs.gif)
 ![Moving panes](docs/demos/move-panes.gif)
+![Splitting panes](docs/demos/drag-split.gif)
 
 ### History & Vault
 
@@ -52,7 +53,9 @@ Drag a tab to **reorder** it, drop it on a pane edge to **split**, or drop it on
 
 A right-side column of small terminal "controls" (lazygit, log tails, build watchers) defined in `.cmux/dock.json` or `~/.config/cmux/dock.json`. Edit them from a GUI (**Settings → Dock → Edit Dock Controls**). Hidden by default; toggle from the header.
 
-| Dock | Dock editor |
+![Dock](docs/demos/dock.gif)
+
+| Dock controls | Dock editor |
 |---|---|
 | ![Dock](docs/screenshots/dock.png) | ![Dock editor](docs/screenshots/dock-editor.png) |
 

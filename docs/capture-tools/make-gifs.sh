@@ -118,6 +118,17 @@ printf 'k 14\nw 600\nt a\nw 300\nt p\nw 300\nt i\nw 700\nk 28\nw 1200\nq\n' > /t
 kb /tmp/frames-pal /tmp/s.txt
 mkgif /tmp/frames-pal "$REPO/docs/demos/command-palette.gif" "1120:700:0:46" 840 0.7
 
+# Scene 5: split a pane — drag a tab onto the pane's right edge to split it off
+stage_only tabsdemo
+gen_drag 335 66 1540 420 1500 > /tmp/s.txt; vp /tmp/frames-split /tmp/s.txt
+mkgif /tmp/frames-split "$REPO/docs/demos/drag-split.gif" "1315:500:285:48" 880
+
+# Scene 6: dock — click the header dock-toggle button; the controls column slides in
+stage_only demo
+printf 'm 1420 22\nw 800\nd\nw 90\nu\nw 2600\nq\n' > /tmp/s.txt
+vp /tmp/frames-dock /tmp/s.txt
+mkgif /tmp/frames-dock "$REPO/docs/demos/dock.gif" "1315:700:285:8" 940
+
 stop
-echo "wrote 4 GIFs to docs/demos/"
+echo "wrote 6 GIFs to docs/demos/"
 echo "REVIEW each (magick gif -coalesce) — confirm no real username/host/path is visible."
