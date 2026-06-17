@@ -847,6 +847,32 @@ case "$command" in
     esac
     ;;
 
+  # ── Kiro / Cursor / Gemini CLI hooks (turnkey wrappers over the agent hook) ──
+  kiro-hook|cursor-hook|gemini-hook)
+    agent_name="${command%-hook}"   # kiro / cursor / gemini
+    hook_event="${1:-}"
+    shift || true
+    case "$hook_event" in
+      session-start)
+        _cmux_send "set_status ${agent_name} running \"${agent_name} running\""
+        ;;
+      stop|session-end)
+        _cmux_send "clear_status ${agent_name}"
+        ;;
+      notification)
+        if hook_json="$(cat)"; then
+          title="$(printf '%s' "$hook_json" | sed -n 's/.*"title"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+          body="$(printf '%s' "$hook_json" | sed -n 's/.*"body"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+          _cmux_send "notify \"${title:-${agent_name}}\" \"${body:-}\""
+        fi
+        ;;
+      *)
+        echo "Unknown ${command} event: $hook_event" >&2
+        exit 1
+        ;;
+    esac
+    ;;
+
   # ── Generic agent hook (namespaced by --cli) ──
   agent)
     agent_sub="${1:-}"
