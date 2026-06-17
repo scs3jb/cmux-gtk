@@ -310,6 +310,7 @@ pub(super) fn handle_capabilities(id: Value) -> Response {
         "workspace.current",
         "workspace.rename",
         "workspace.ai_name",
+        "workspace.set_description",
         "workspace.reorder",
         "workspace.set_status",
         "workspace.report_git_branch",

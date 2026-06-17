@@ -929,6 +929,12 @@ fn create_workspace_row(
         } else {
             format!("\nDirectory: {}", compact_path(&workspace.current_directory))
         };
+        let desc_label = workspace
+            .description
+            .as_deref()
+            .filter(|d| !d.is_empty())
+            .map(|d| format!("\n{d}"))
+            .unwrap_or_default();
         let ports_label = {
             let ports: Vec<u16> = workspace
                 .panels
@@ -947,8 +953,9 @@ fn create_workspace_row(
             }
         };
         let tooltip = format!(
-            "{}\nPanels: {}{}{}{}{}",
+            "{}{}\nPanels: {}{}{}{}{}",
             workspace.display_title(),
+            desc_label,
             panel_count,
             dir_label,
             git_label,

@@ -715,6 +715,10 @@ case "$command" in
   clear-closed) _cmux_json "workspace.clear_closed" "{}" ;;
   ai-name) # ai-name [workspace-id] — AI-generate a title from the focused terminal
     if [[ -n "${1:-}" ]]; then _cmux_json "workspace.ai_name" "{\"workspace\":\"$1\"}"; else _cmux_json "workspace.ai_name" "{}"; fi ;;
+  describe) # describe <text> — set the selected workspace's description (empty clears)
+    desc="${1:-}"
+    desc_json=$(printf '%s' "$desc" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))' 2>/dev/null || printf '"%s"' "$desc")
+    _cmux_json "workspace.set_description" "{\"description\":$desc_json}" ;;
   top) _cmux_json "system.task_manager" "{}" ;;
   ps) _cmux_query "system.processes" "{}" ;;
   overview) _cmux_json "system.overview" "{}" ;;

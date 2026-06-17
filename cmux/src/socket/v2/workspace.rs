@@ -30,6 +30,7 @@ pub(super) fn handle_workspace_list(id: Value, state: &Arc<SharedState>) -> Resp
                 "index": i,
                 "id": ws.id.to_string(),
                 "title": ws.display_title(),
+                "description": ws.description,
                 "directory": ws.current_directory,
                 "panel_count": ws.panels.len(),
                 "unread_count": ws.unread_count,
@@ -1495,6 +1496,45 @@ pub(super) fn handle_workspace_rename(
 
         if let Some(ws) = ws {
             ws.custom_title = Some(truncate_str(title, MAX_TITLE_LEN).to_string());
+            true
+        } else {
+            false
+        }
+    };
+
+    if updated {
+        state.notify_metadata_refresh();
+        Response::success(id, serde_json::json!({"ok": true}))
+    } else {
+        Response::error(id, "not_found", "Workspace not found")
+    }
+}
+
+pub(super) fn handle_workspace_set_description(
+    id: Value,
+    params: &Value,
+    state: &Arc<SharedState>,
+) -> Response {
+    let ws_id = match parse_workspace_param(params) {
+        Ok(v) => v,
+        Err(()) => return Response::error(id, "invalid_params", "Invalid workspace UUID"),
+    };
+    // An empty/absent description clears it.
+    let description = params
+        .get("description")
+        .and_then(|v| v.as_str())
+        .map(|s| truncate_str(s, MAX_DIRECTORY_LEN).to_string())
+        .filter(|s| !s.trim().is_empty());
+
+    let updated = {
+        let mut tm = lock_or_recover(&state.tab_manager);
+        let ws = if let Some(wid) = ws_id {
+            tm.workspace_mut(wid)
+        } else {
+            tm.selected_mut()
+        };
+        if let Some(ws) = ws {
+            ws.description = description;
             true
         } else {
             false

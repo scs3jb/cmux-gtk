@@ -80,6 +80,8 @@ pub struct Workspace {
     /// Per-workspace environment variables injected into every shell spawned in
     /// this workspace (from the cmux.json `workspace.env` map). Session-scoped.
     pub env: Vec<(String, String)>,
+    /// Optional free-text description shown in the sidebar tooltip. Session-scoped.
+    pub description: Option<String>,
 }
 
 /// Individual PR check result.
@@ -204,6 +206,7 @@ impl Workspace {
             imessage_mode: false,
             closed_panels: Vec::new(),
             env: Vec::new(),
+            description: None,
         }
     }
 
