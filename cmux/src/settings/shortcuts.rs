@@ -60,6 +60,14 @@ pub struct ShortcutConfig {
     /// Action name → optional keybinding map.
     /// A `null` or missing value means the shortcut is disabled/unbound.
     pub bindings: HashMap<String, Option<Keybinding>>,
+    /// Optional VS Code-style "when" context clause per action. The shortcut
+    /// only fires when the clause evaluates true. Supports context keys joined
+    /// by `&&` / `||` with optional `!` negation (e.g. `terminalFocused`,
+    /// `!terminalFocused`, `browserFocused || editorFocused`).
+    /// Context keys: terminalFocused, browserFocused, editorFocused,
+    /// panelFocused (any non-terminal), paneZoomed.
+    #[serde(default)]
+    pub when: HashMap<String, String>,
 }
 
 impl Default for ShortcutConfig {
@@ -272,7 +280,10 @@ impl Default for ShortcutConfig {
             );
         }
 
-        Self { bindings }
+        Self {
+            bindings,
+            when: HashMap::new(),
+        }
     }
 }
 
@@ -282,6 +293,57 @@ impl ShortcutConfig {
     pub fn get(&self, action: &str) -> Option<&Keybinding> {
         self.bindings.get(action).and_then(|opt| opt.as_ref())
     }
+
+    /// Whether `action` is allowed to fire given the current context keys.
+    /// Actions without a `when` clause are always allowed.
+    pub fn when_allows(&self, action: &str, ctx: &ShortcutContext) -> bool {
+        match self.when.get(action) {
+            Some(expr) => eval_when(expr, ctx),
+            None => true,
+        }
+    }
+}
+
+/// The set of context keys that are currently active, for `when` evaluation.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ShortcutContext {
+    pub terminal_focused: bool,
+    pub browser_focused: bool,
+    pub editor_focused: bool,
+    pub pane_zoomed: bool,
+}
+
+impl ShortcutContext {
+    fn has(&self, key: &str) -> bool {
+        match key {
+            "terminalFocused" => self.terminal_focused,
+            "browserFocused" => self.browser_focused,
+            "editorFocused" => self.editor_focused,
+            // Any non-terminal panel (browser, diff, markdown, notes, …).
+            "panelFocused" => !self.terminal_focused,
+            "paneZoomed" => self.pane_zoomed,
+            _ => false,
+        }
+    }
+}
+
+/// Evaluate a minimal `when` expression: `||` (lowest precedence), then `&&`,
+/// then an optional leading `!` on a context key. Unknown keys are false.
+fn eval_when(expr: &str, ctx: &ShortcutContext) -> bool {
+    expr.split("||").any(|or_term| {
+        let or_term = or_term.trim();
+        if or_term.is_empty() {
+            return false;
+        }
+        or_term.split("&&").all(|and_term| {
+            let and_term = and_term.trim();
+            if let Some(rest) = and_term.strip_prefix('!') {
+                !ctx.has(rest.trim())
+            } else {
+                ctx.has(and_term)
+            }
+        })
+    })
 }
 
 /// Load shortcut config from disk.
@@ -327,4 +389,33 @@ pub fn save(config: &ShortcutConfig) -> Result<(), std::io::Error> {
         f.write_all(json.as_bytes())?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod when_tests {
+    use super::*;
+
+    fn ctx(term: bool, browser: bool) -> ShortcutContext {
+        ShortcutContext {
+            terminal_focused: term,
+            browser_focused: browser,
+            editor_focused: false,
+            pane_zoomed: false,
+        }
+    }
+
+    #[test]
+    fn evaluates_when_clauses() {
+        assert!(eval_when("terminalFocused", &ctx(true, false)));
+        assert!(!eval_when("terminalFocused", &ctx(false, false)));
+        assert!(eval_when("!terminalFocused", &ctx(false, false)));
+        assert!(eval_when("panelFocused", &ctx(false, true)));
+        assert!(!eval_when("panelFocused", &ctx(true, false)));
+        // || / &&
+        assert!(eval_when("terminalFocused || browserFocused", &ctx(false, true)));
+        assert!(!eval_when("terminalFocused && browserFocused", &ctx(true, false)));
+        assert!(eval_when("browserFocused && !terminalFocused", &ctx(false, true)));
+        // unknown key is false
+        assert!(!eval_when("nopeKey", &ctx(true, true)));
+    }
 }

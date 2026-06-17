@@ -55,6 +55,29 @@ pub(super) fn setup_shortcuts(
         {
             let shortcuts = crate::settings::shortcuts::load();
             let key_name = keyval.name().map(|n| n.to_string()).unwrap_or_default();
+            // Build the current context for "when" clause evaluation (lock is
+            // released before the action bodies, which re-lock the tab manager).
+            let when_ctx = {
+                use crate::model::PanelType;
+                let tm = lock_or_recover(&state.shared.tab_manager);
+                if let Some(ws) = tm.selected() {
+                    let pt = ws
+                        .focused_panel_id
+                        .and_then(|pid| ws.panels.get(&pid))
+                        .map(|p| p.panel_type);
+                    crate::settings::shortcuts::ShortcutContext {
+                        terminal_focused: matches!(pt, Some(PanelType::Terminal)),
+                        browser_focused: matches!(pt, Some(PanelType::Browser)),
+                        editor_focused: matches!(
+                            pt,
+                            Some(PanelType::Notes) | Some(PanelType::Markdown)
+                        ),
+                        pane_zoomed: ws.zoomed_panel_id.is_some(),
+                    }
+                } else {
+                    crate::settings::shortcuts::ShortcutContext::default()
+                }
+            };
             let configurable_actions = [
                 "notification.defer_unread",
                 "notification.toggle_unread",
@@ -72,6 +95,7 @@ pub(super) fn setup_shortcuts(
                         && binding.shift == shift
                         && binding.alt == alt
                         && binding.key == key_name
+                        && shortcuts.when_allows(action, &when_ctx)
                     {
                         match *action {
                             "notification.defer_unread" => {
