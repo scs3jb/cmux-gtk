@@ -248,16 +248,35 @@ fn load_markdown_file(web_view: &webkit6::WebView, path: &str) {
 
 /// Convert markdown text to a complete HTML document with styling.
 fn render_markdown(markdown: &str) -> String {
-    use pulldown_cmark::{html, Options, Parser};
+    use pulldown_cmark::{html, CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_TASKLISTS);
 
-    let parser = Parser::new_ext(markdown, options);
+    // Rewrite ```mermaid fenced blocks into `<pre class="mermaid">` with the raw
+    // (un-escaped) diagram source so mermaid.js can render them client-side.
+    let mut in_mermaid = false;
+    let events: Vec<Event> = Parser::new_ext(markdown, options)
+        .flat_map(|ev| match ev {
+            Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(ref lang)))
+                if lang.as_ref() == "mermaid" =>
+            {
+                in_mermaid = true;
+                vec![Event::Html(r#"<pre class="mermaid">"#.into())]
+            }
+            Event::End(TagEnd::CodeBlock) if in_mermaid => {
+                in_mermaid = false;
+                vec![Event::Html("</pre>".into())]
+            }
+            Event::Text(t) if in_mermaid => vec![Event::Html(t)],
+            other => vec![other],
+        })
+        .collect();
+
     let mut html_output = String::new();
-    html::push_html(&mut html_output, parser);
+    html::push_html(&mut html_output, events.into_iter());
 
     format!(
         r#"<!DOCTYPE html>
@@ -298,6 +317,7 @@ code {{
     font-size: 0.875em;
 }}
 pre code {{ background: transparent; padding: 0; }}
+pre.mermaid {{ background: transparent; text-align: center; }}
 blockquote {{
     border-left: 4px solid light-dark(#ddd, #444);
     margin: 0;
@@ -321,7 +341,13 @@ hr {{ border: none; border-top: 1px solid light-dark(#eee, #333); margin: 2em 0;
 input[type="checkbox"] {{ margin-right: 0.5em; }}
 </style>
 </head>
-<body>{html_output}</body>
+<body>{html_output}
+<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+mermaid.initialize({{ startOnLoad: true, securityLevel: 'strict',
+    theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default' }});
+</script>
+</body>
 </html>"#
     )
 }
