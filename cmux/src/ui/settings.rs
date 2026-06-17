@@ -462,6 +462,34 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
 
     appearance_page.add(&dock_group);
 
+    // ── Editor & Files group ──
+    let editor_group = adw::PreferencesGroup::new();
+    editor_group.set_title("Editor & Files");
+
+    let word_wrap_row = adw::SwitchRow::new();
+    word_wrap_row.set_title("Word Wrap");
+    word_wrap_row.set_subtitle("Wrap long lines in the file preview, editor, and notes panels");
+    word_wrap_row.set_active(current_settings.editor_word_wrap);
+    editor_group.add(&word_wrap_row);
+
+    let file_open_action_row = adw::ComboRow::new();
+    file_open_action_row.set_title("File Double-Click Action");
+    file_open_action_row.set_subtitle("What double-clicking a file in the explorer does");
+    file_open_action_row.set_model(Some(&gtk4::StringList::new(&[
+        "Preview",
+        "Default app",
+        "Preferred editor",
+    ])));
+    file_open_action_row.set_selected(current_settings.file_explorer_open_action.to_index());
+    editor_group.add(&file_open_action_row);
+
+    let preferred_editor_row = adw::EntryRow::new();
+    preferred_editor_row.set_title("Preferred Editor Command");
+    preferred_editor_row.set_text(&current_settings.preferred_editor);
+    editor_group.add(&preferred_editor_row);
+
+    appearance_page.add(&editor_group);
+
     window.add(&appearance_page);
 
     // ── Notifications page ──
@@ -1210,6 +1238,11 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
                     .unwrap_or(6)
                     .clamp(1, 40),
                 show_dock: show_dock_row.is_active(),
+                editor_word_wrap: word_wrap_row.is_active(),
+                file_explorer_open_action: settings::FileOpenAction::from_index(
+                    file_open_action_row.selected(),
+                ),
+                preferred_editor: preferred_editor_row.text().trim().to_string(),
                 shortcuts: shortcuts_state.borrow().clone(),
                 minimal_mode: current_settings.minimal_mode,
                 show_tab_close_button: show_tab_close_row.is_active(),

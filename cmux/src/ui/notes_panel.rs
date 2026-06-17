@@ -97,7 +97,11 @@ pub fn create_notes_widget(
     let text_view = gtk4::TextView::new();
     text_view.set_editable(true);
     text_view.set_monospace(true);
-    text_view.set_wrap_mode(gtk4::WrapMode::WordChar);
+    text_view.set_wrap_mode(if crate::settings::load().editor_word_wrap {
+        gtk4::WrapMode::WordChar
+    } else {
+        gtk4::WrapMode::None
+    });
     text_view.set_left_margin(8);
     text_view.set_right_margin(8);
     text_view.set_top_margin(4);

@@ -125,9 +125,7 @@ impl FileExplorer {
                                 let full_path = tree_model_get_string(&store, &iter, COL_PATH);
                                 if !full_path.is_empty() && full_path != DUMMY_PATH {
                                     gesture.set_state(gtk4::EventSequenceState::Claimed);
-                                    let _ = std::process::Command::new("xdg-open")
-                                        .arg(&full_path)
-                                        .spawn();
+                                    open_file_with_action(&full_path);
                                 }
                             }
                         }
@@ -378,6 +376,45 @@ impl FileExplorer {
 /// Read up to `PREVIEW_TEXT_LIMIT` bytes from a file and return the content
 /// as a UTF-8 string.  Returns `None` if the file cannot be read or if the
 /// first `PREVIEW_TEXT_LIMIT` bytes are not valid UTF-8 (i.e. binary).
+/// Open a double-clicked file according to `file_explorer_open_action`.
+fn open_file_with_action(full_path: &str) {
+    use crate::settings::FileOpenAction;
+    match crate::settings::load().file_explorer_open_action {
+        // The inline preview pane already updates on selection (single-click,
+        // which fires before the double-click), so "preview" needs no extra work.
+        FileOpenAction::Preview => {}
+        FileOpenAction::DefaultApp => {
+            let _ = std::process::Command::new("xdg-open").arg(full_path).spawn();
+        }
+        FileOpenAction::PreferredEditor => {
+            let editor = crate::settings::load().preferred_editor;
+            if editor.trim().is_empty() {
+                // Fall back to the system default if no editor is configured.
+                let _ = std::process::Command::new("xdg-open").arg(full_path).spawn();
+                return;
+            }
+            // Split the configured command into program + args, substituting {path}.
+            let mut parts = editor.split_whitespace();
+            if let Some(prog) = parts.next() {
+                let mut cmd = std::process::Command::new(prog);
+                let mut had_placeholder = false;
+                for arg in parts {
+                    if arg.contains("{path}") {
+                        had_placeholder = true;
+                        cmd.arg(arg.replace("{path}", full_path));
+                    } else {
+                        cmd.arg(arg);
+                    }
+                }
+                if !had_placeholder {
+                    cmd.arg(full_path);
+                }
+                let _ = cmd.spawn();
+            }
+        }
+    }
+}
+
 fn read_text_preview(path: &str) -> Option<String> {
     use std::io::Read;
     let mut file = std::fs::File::open(path).ok()?;

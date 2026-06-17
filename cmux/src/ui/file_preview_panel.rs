@@ -136,7 +136,11 @@ pub fn create_file_preview_widget(
             text_view.set_editable(false);
             text_view.set_cursor_visible(false);
             text_view.set_monospace(true);
-            text_view.set_wrap_mode(gtk4::WrapMode::None);
+            text_view.set_wrap_mode(if crate::settings::load().editor_word_wrap {
+                gtk4::WrapMode::WordChar
+            } else {
+                gtk4::WrapMode::None
+            });
             text_view.set_left_margin(8);
             text_view.set_right_margin(8);
             text_view.set_top_margin(4);

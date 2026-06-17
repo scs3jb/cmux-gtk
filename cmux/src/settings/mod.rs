@@ -88,6 +88,16 @@ pub struct AppSettings {
     /// Off by default — reveal it via the header button / palette / shortcut.
     #[serde(default)]
     pub show_dock: bool,
+    /// Word-wrap long lines in the file preview / editor and notes panels.
+    #[serde(default = "default_true")]
+    pub editor_word_wrap: bool,
+    /// What double-clicking a file in the sidebar file explorer does.
+    #[serde(default)]
+    pub file_explorer_open_action: FileOpenAction,
+    /// Command for the "preferred editor" open action (e.g. "code", "nvim").
+    /// `{path}` is substituted with the file path; if absent the path is appended.
+    #[serde(default)]
+    pub preferred_editor: String,
     /// Keyboard shortcuts.
     #[serde(skip)]
     pub shortcuts: shortcuts::ShortcutConfig,
@@ -755,6 +765,40 @@ fn default_textbox_max_lines() -> u32 {
     6
 }
 
+fn default_true() -> bool {
+    true
+}
+
+/// Action taken when a file is double-clicked in the sidebar file explorer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FileOpenAction {
+    /// Open in cmux's inline file preview / markdown viewer.
+    Preview,
+    /// Open with the system default application (`xdg-open`). The default.
+    #[default]
+    DefaultApp,
+    /// Open with the configured `preferred_editor` command.
+    PreferredEditor,
+}
+
+impl FileOpenAction {
+    pub fn from_index(i: u32) -> Self {
+        match i {
+            0 => Self::Preview,
+            2 => Self::PreferredEditor,
+            _ => Self::DefaultApp,
+        }
+    }
+    pub fn to_index(self) -> u32 {
+        match self {
+            Self::Preview => 0,
+            Self::DefaultApp => 1,
+            Self::PreferredEditor => 2,
+        }
+    }
+}
+
 fn default_resume_command_approvals() -> Vec<String> {
     vec![
         "claude --resume".to_string(),
@@ -812,6 +856,9 @@ impl Default for AppSettings {
             focus_textbox_on_new_terminals: false,
             textbox_max_lines: default_textbox_max_lines(),
             show_dock: false,
+            editor_word_wrap: true,
+            file_explorer_open_action: FileOpenAction::default(),
+            preferred_editor: String::new(),
             shortcuts: shortcuts::ShortcutConfig::default(),
         }
     }
