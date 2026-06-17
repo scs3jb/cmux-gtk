@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>webapp · status</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 system-ui, "Noto Sans", sans-serif;
+         background: #14161f; color: #e6e7ee; }
+  header { padding: 22px 32px; border-bottom: 1px solid #262a3a;
+           display: flex; align-items: center; gap: 14px; }
+  .logo { width: 30px; height: 30px; border-radius: 8px;
+          background: linear-gradient(135deg,#926EE4,#5b8def); }
+  header h1 { font-size: 18px; margin: 0; font-weight: 650; }
+  header .env { margin-left: auto; font-size: 12px; color: #8b90a6;
+                border: 1px solid #2c3142; padding: 4px 10px; border-radius: 999px; }
+  main { max-width: 880px; margin: 0 auto; padding: 32px; }
+  .cards { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; }
+  .card { background: #1b1e2b; border: 1px solid #262a3a; border-radius: 12px; padding: 18px; }
+  .card .k { font-size: 12px; color: #8b90a6; text-transform: uppercase; letter-spacing: .04em; }
+  .card .v { font-size: 26px; font-weight: 680; margin-top: 6px; }
+  .ok { color: #56d364; } .warn { color: #e3b341; }
+  h2 { font-size: 14px; color: #8b90a6; text-transform: uppercase; letter-spacing: .04em;
+       margin: 30px 0 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  td, th { text-align: left; padding: 10px 12px; border-bottom: 1px solid #20242f; }
+  th { color: #8b90a6; font-weight: 600; }
+  .pill { font-size: 12px; padding: 2px 9px; border-radius: 999px; }
+  .pill.ok { background: #143524; color: #56d364; }
+  .pill.warn { background: #322a12; color: #e3b341; }
+  code { background: #20242f; padding: 1px 6px; border-radius: 5px; font-size: 13px; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="logo"></div>
+    <h1>webapp</h1>
+    <span class="env">production · v0.3.1</span>
+  </header>
+  <main>
+    <div class="cards">
+      <div class="card"><div class="k">Requests / min</div><div class="v">1,284</div></div>
+      <div class="card"><div class="k">p95 latency</div><div class="v ok">41 ms</div></div>
+      <div class="card"><div class="k">Error rate</div><div class="v ok">0.02%</div></div>
+    </div>
+    <h2>Recent deploys</h2>
+    <table>
+      <tr><th>Version</th><th>Branch</th><th>Status</th><th>When</th></tr>
+      <tr><td><code>v0.3.1</code></td><td>main</td><td><span class="pill ok">passed</span></td><td>4m ago</td></tr>
+      <tr><td><code>v0.3.0</code></td><td>main</td><td><span class="pill ok">passed</span></td><td>2h ago</td></tr>
+      <tr><td><code>v0.2.9</code></td><td>release/feed</td><td><span class="pill warn">canary</span></td><td>1d ago</td></tr>
+    </table>
+    <h2>Endpoints</h2>
+    <table>
+      <tr><th>Route</th><th>Method</th><th>Auth</th></tr>
+      <tr><td><code>/api/login</code></td><td>POST</td><td>—</td></tr>
+      <tr><td><code>/api/users</code></td><td>GET</td><td>required</td></tr>
+      <tr><td><code>/api/feed</code></td><td>GET</td><td>required</td></tr>
+    </table>
+  </main>
+</body>
+</html>

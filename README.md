@@ -72,6 +72,18 @@ An opt-in multi-line input below a terminal for composing multi-line agent promp
 | Inline **image, video, and PDF** previews (PDF rendered page-by-page via poppler) — ideal for reviewing screenshots and demo recordings agents produce. | `cmux top` opens a CPU/RAM monitor for the agent & terminal processes in your workspaces. |
 | ![Finder previews](docs/screenshots/pdf-preview.png) | ![Task Manager](docs/screenshots/task-manager.png) |
 
+### Panels — more than terminals
+
+Any pane can hold a non-terminal view: a **rendered Markdown** file, a **git diff** (with a Staged toggle and branch compare), a **project tree** with a file-type summary, an **editable Notes** scratchpad beside your terminal, or a full **WebKit browser** with a Playwright-style automation API.
+
+| Markdown viewer | Diff viewer |
+|---|---|
+| ![Markdown viewer](docs/screenshots/markdown.png) | ![Diff viewer](docs/screenshots/diff.png) |
+| **Project visualizer** | **Notes scratchpad** |
+| ![Project visualizer](docs/screenshots/project.png) | ![Notes scratchpad](docs/screenshots/notes.png) |
+
+![Integrated browser](docs/screenshots/browser.png)
+
 ### Command palette & custom commands
 
 Fuzzy command palette and workspace switcher. Define your own entries in `cmux.json` (project `.cmux/cmux.json`, project root, or global) that run a shell command **or** open a whole multi-pane `workspace` layout.
