@@ -149,6 +149,12 @@ Gotchas baked into the script:
   `gif[N]`, or you'll see only the changed strip (looks blank/garbled). (Watch the
   glob too: `ls foo_*.png | tail -1` picks `foo_last.png` over `foo_142.png`
   because `l` > `1`.)
+- **No Vault GIF on purpose.** Clicking a Vault session runs the *real* `claude`
+  binary (`--resume`), which is non-deterministic and can surface real state on
+  another machine — never drive it. The search-filter is safe, but the headless
+  GLArea leaves faint ghost rows of the filtered-out sessions (a source render
+  artifact, not a palette issue — full-stats palette doesn't fix it), so the
+  static `vault-pane.png` screenshot is used instead.
 - Crops always start at **y=46–48** so the **title bar is excluded** (it can carry
   the leaky `@host:/home/...` window title). The drag GIFs also drop the sidebar
   (x=285); the overview/palette GIFs keep it (x=0) for context — safe because the

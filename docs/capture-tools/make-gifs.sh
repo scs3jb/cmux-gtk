@@ -129,6 +129,27 @@ printf 'm 1420 22\nw 800\nd\nw 90\nu\nw 2600\nq\n' > /tmp/s.txt
 vp /tmp/frames-dock /tmp/s.txt
 mkgif /tmp/frames-dock "$REPO/docs/demos/dock.gif" "1315:700:285:8" 940
 
+# Scene 7: history — close a couple of workspaces, then reopen one from the history pane
+ws_id(){ R list 2>/dev/null | python3 -c "import sys,json
+for w in json.load(sys.stdin)['result']['workspaces']:
+    if w.get('title')=='$1': print(w['id'])"; }
+for c in demo api-ws docs-ws; do R run "$c" >/dev/null 2>&1; sleep 1.6; done
+# drop the leaky default workspaces and CLEAR the closed-stack so they never show in history
+leaky=$(R list 2>/dev/null | python3 -c "import sys,json
+for w in json.load(sys.stdin)['result']['workspaces']:
+    t=w.get('title','')
+    if t=='Terminal' or t.startswith('@') or '/home/' in t: print(w['id'])")
+for id in $leaky; do R close "$id" >/dev/null 2>&1; done; sleep 0.5
+R clear-closed >/dev/null 2>&1; sleep 0.5
+# close two clean workspaces so history lists them, keep single-pane 'docs' active
+docs=$(ws_id docs)
+for t in web api; do id=$(ws_id "$t"); [ -n "$id" ] && R close "$id" >/dev/null 2>&1; sleep 0.4; done
+R select "$docs" >/dev/null 2>&1; sleep 0.8
+R history >/dev/null 2>&1; sleep 1.3
+printf 'm 994 178\nw 900\nd\nw 90\nu\nw 1600\nq\n' > /tmp/s.txt   # click the 'api' entry to reopen
+vp /tmp/frames-hist /tmp/s.txt
+mkgif /tmp/frames-hist "$REPO/docs/demos/history.gif" "1600:690:0:46" 960 0.7
+
 stop
-echo "wrote 6 GIFs to docs/demos/"
+echo "wrote 7 GIFs to docs/demos/"
 echo "REVIEW each (magick gif -coalesce) — confirm no real username/host/path is visible."

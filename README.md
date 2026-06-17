@@ -47,7 +47,7 @@ Drag a tab to **reorder** it, drop it on a pane edge to **split**, or drop it on
 | | |
 |---|---|
 | **History** — `cmux history` opens a searchable, day-grouped list of recently closed & focused workspaces; click to reopen. Closed history persists across restarts. | **Vault** — `cmux vault` indexes past Claude Code / Codex sessions with title/dir/preview search; click a session to resume it in a terminal. |
-| ![History pane](docs/screenshots/history-pane.png) | ![Vault pane](docs/screenshots/vault-pane.png) |
+| ![History pane](docs/demos/history.gif) | ![Vault pane](docs/screenshots/vault-pane.png) |
 
 ### Dock — always-on terminal controls
 
