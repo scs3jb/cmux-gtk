@@ -113,7 +113,7 @@ Fuzzy command palette and workspace switcher. Define your own entries in `cmux.j
 - **Terminal** — Ghostty-backed GL surfaces with vi-style copy mode and a vim badge indicator
 - **Integrated browser** — WebKit6 panels with 120+ automation commands (Playwright-style API), profiles, history, focus mode
 - **Markdown viewer** — `cmux open file.md` / drag from the sidebar; renders **Mermaid diagrams**
-- **Diff viewer** — `cmux diff [path]` git diff CodeView (`--staged` / `--branch <ref>`); plain-GTK, no WebKit
+- **Diff viewer** — `cmux diff [path]` git diff CodeView (`--staged` / `--branch <ref>`); plain-GTK, no WebKit; **syntax-highlighted** lines and right-click **review comments** (persisted to `.cmux/diff-comments.json`)
 - **Project visualizer** — `cmux project [path]` directory tree + file-type/size summary
 - **Finder previews** — inline image / video / **PDF** (poppler) previews in the file-preview panel
 - **File explorer** — sidebar tree with configurable double-click action (preview / default app / preferred editor) and **Insert Path / Insert Relative Path** into the focused terminal
@@ -123,7 +123,8 @@ Fuzzy command palette and workspace switcher. Define your own entries in `cmux.j
 - **Vault pane** — `cmux vault` searchable index of past Claude Code / Codex sessions, click to resume
 
 ### AI agent workflow
-- **Agent integrations** — `cmux claude-teams` & `cmux omo` open teammates/subagents as native panes via a tmux shim; `terminal-notifier` → `cmux notify`
+- **Agent integrations** — `cmux claude-teams` & `cmux omo` open teammates/subagents as native panes via a tmux shim; `terminal-notifier` → `cmux notify`. Turnkey status/notification hooks: `cmux claude-hook` / `codex-hook` / `kiro-hook` / `cursor-hook` / `gemini-hook` (or generic `cmux agent hook … --cli <name>`)
+- **AI workspace auto-naming** — opt-in: name an untitled workspace from its agent transcript when the agent finishes (`cmux ai-name`, or auto via Settings; uses `ANTHROPIC_API_KEY`)
 - **Task Manager** — `cmux top` CPU/RAM monitor (also `cmux ps` for JSON)
 - **TextBox** — multi-line prompt composer below terminals (opt-in)
 - **Dock** — right-side terminal controls from `dock.json`, with a GUI editor
@@ -159,7 +160,7 @@ Fuzzy command palette and workspace switcher. Define your own entries in `cmux.j
 
 ## Keyboard shortcuts
 
-All shortcuts are configurable via `~/.config/cmux/shortcuts.json` (or **Settings → Keyboard**).
+All shortcuts are configurable via `~/.config/cmux/shortcuts.json` (or **Settings → Keyboard**). A per-action `when` clause (VS Code-style: `terminalFocused`, `browserFocused`, `editorFocused`, `panelFocused`, `paneZoomed`, combined with `&&`/`||`/`!`) can gate a binding by context.
 
 | Shortcut | Action |
 |----------|--------|
