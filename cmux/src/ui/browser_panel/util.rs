@@ -14,6 +14,12 @@ pub(super) fn normalize_url(input: &str, engine: settings::SearchEngine) -> Stri
     if trimmed.contains('.') && !trimmed.contains(' ') {
         return format!("https://{trimmed}");
     }
+    // Keyword-triggered search providers ("gh rust" → GitHub search).
+    for kw in &settings::load().browser.search_keywords {
+        if let Some(url) = kw.try_resolve(trimmed) {
+            return url;
+        }
+    }
     engine.search_url(trimmed)
 }
 

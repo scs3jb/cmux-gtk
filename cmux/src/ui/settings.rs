@@ -1185,6 +1185,7 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
                     enabled: browser_enabled_row.is_active(),
                     search_engine: SearchEngine::from_index(engine_row.selected()),
                     custom_search_template: custom_search_row.text().to_string(),
+                    search_keywords: current_settings.browser.search_keywords.clone(),
                     home_url,
                     search_suggestions: suggestions_row.is_active(),
                     http_allowlist: current_settings.browser.http_allowlist.clone(),

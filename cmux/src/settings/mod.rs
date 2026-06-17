@@ -309,6 +309,11 @@ pub struct BrowserSettings {
     /// Example: `https://search.brave.com/search?q=%s`.
     #[serde(default)]
     pub custom_search_template: String,
+    /// Extra search providers selectable by a keyword prefix in the omnibar.
+    /// Typing `<keyword> terms` routes the search to that provider's template
+    /// (e.g. keyword `gh` → `https://github.com/search?q=%s`).
+    #[serde(default)]
+    pub search_keywords: Vec<SearchKeyword>,
     /// Home page URL (shown when clicking home button).
     pub home_url: String,
     /// Show remote search suggestions in the omnibar.
@@ -327,12 +332,39 @@ fn bool_true() -> bool {
     true
 }
 
+/// A keyword-triggered search provider. When the omnibar query begins with
+/// `keyword ` (a space), the rest is searched via `url_template` (`%s` = query,
+/// or appended if absent).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchKeyword {
+    pub keyword: String,
+    pub url_template: String,
+}
+
+impl SearchKeyword {
+    /// If `query` begins with this provider's keyword, return the resolved URL.
+    pub fn try_resolve(&self, query: &str) -> Option<String> {
+        let kw = self.keyword.trim();
+        if kw.is_empty() {
+            return None;
+        }
+        let rest = query.strip_prefix(kw)?.strip_prefix(' ')?;
+        let encoded = urlencoded(rest.trim());
+        Some(if self.url_template.contains("%s") {
+            self.url_template.replace("%s", &encoded)
+        } else {
+            format!("{}{}", self.url_template, encoded)
+        })
+    }
+}
+
 impl Default for BrowserSettings {
     fn default() -> Self {
         Self {
             enabled: true,
             search_engine: SearchEngine::DuckDuckGo,
             custom_search_template: String::new(),
+            search_keywords: Vec::new(),
             home_url: "https://duckduckgo.com".to_string(),
             search_suggestions: true,
             http_allowlist: Vec::new(),
