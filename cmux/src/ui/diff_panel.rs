@@ -154,9 +154,29 @@ pub fn create_diff_widget(
     container.upcast()
 }
 
+/// Lazily-loaded syntect syntax and theme sets (default assets, embedded).
+fn syntax_assets() -> &'static (syntect::parsing::SyntaxSet, syntect::highlighting::ThemeSet) {
+    use std::sync::OnceLock;
+    static ASSETS: OnceLock<(syntect::parsing::SyntaxSet, syntect::highlighting::ThemeSet)> =
+        OnceLock::new();
+    ASSETS.get_or_init(|| {
+        (
+            syntect::parsing::SyntaxSet::load_defaults_newlines(),
+            syntect::highlighting::ThemeSet::load_defaults(),
+        )
+    })
+}
+
+/// Whether the app is currently in dark mode (picks the diff theme + tints).
+fn is_dark() -> bool {
+    libadwaita::StyleManager::default().is_dark()
+}
+
 /// Install the text tags used to color diff lines.
 fn install_diff_tags(buffer: &gtk4::TextBuffer) {
     let table = buffer.tag_table();
+    let dark = is_dark();
+    // Foreground tags for the +/- prefix and hunk/meta lines.
     let add = gtk4::TextTag::builder()
         .name("diff-add")
         .foreground("#2ea043")
@@ -173,10 +193,71 @@ fn install_diff_tags(buffer: &gtk4::TextBuffer) {
         .name("diff-meta")
         .weight(700)
         .build();
+    // Subtle line-background tints so highlighted code keeps its add/remove cue.
+    let add_bg = gtk4::TextTag::builder()
+        .name("diff-add-bg")
+        .background(if dark { "#10261b" } else { "#e6ffec" })
+        .build();
+    let remove_bg = gtk4::TextTag::builder()
+        .name("diff-remove-bg")
+        .background(if dark { "#2a1518" } else { "#ffebe9" })
+        .build();
     table.add(&add);
     table.add(&remove);
     table.add(&hunk);
     table.add(&meta);
+    table.add(&add_bg);
+    table.add(&remove_bg);
+}
+
+/// Return the name of a foreground tag for `color`, creating it on first use.
+fn fg_tag_name(buffer: &gtk4::TextBuffer, color: syntect::highlighting::Color) -> String {
+    let name = format!("synfg-{:02x}{:02x}{:02x}", color.r, color.g, color.b);
+    let table = buffer.tag_table();
+    if table.lookup(&name).is_none() {
+        let hex = format!("#{:02x}{:02x}{:02x}", color.r, color.g, color.b);
+        let tag = gtk4::TextTag::builder()
+            .name(&name)
+            .foreground(&hex)
+            .build();
+        table.add(&tag);
+    }
+    name
+}
+
+/// Insert a code line's `content` (no prefix) syntax-highlighted, applying
+/// `bg_tag` (if any) to the whole inserted range. Falls back to plain text.
+fn insert_highlighted(
+    buffer: &gtk4::TextBuffer,
+    hl: &mut syntect::easy::HighlightLines,
+    ss: &syntect::parsing::SyntaxSet,
+    content: &str,
+    bg_tag: Option<&str>,
+) {
+    match hl.highlight_line(content, ss) {
+        Ok(ranges) => {
+            for (style, text) in ranges {
+                if text.is_empty() {
+                    continue;
+                }
+                let fg = fg_tag_name(buffer, style.foreground);
+                let mut names: Vec<&str> = Vec::with_capacity(2);
+                if let Some(bg) = bg_tag {
+                    names.push(bg);
+                }
+                names.push(&fg);
+                let mut end = buffer.end_iter();
+                buffer.insert_with_tags_by_name(&mut end, text, &names);
+            }
+        }
+        Err(_) => {
+            let mut end = buffer.end_iter();
+            match bg_tag {
+                Some(bg) => buffer.insert_with_tags_by_name(&mut end, content, &[bg]),
+                None => buffer.insert(&mut end, content),
+            }
+        }
+    }
 }
 
 /// Run `git diff` (optionally `--staged`) in `dir` and render it into `buffer`
@@ -223,23 +304,74 @@ fn render_diff(buffer: &gtk4::TextBuffer, dir: &str, spec: &DiffSpec) {
         }
     };
 
-    // Append each line with the appropriate tag.
-    for line in text.split_inclusive('\n') {
-        let tag = if line.starts_with("@@") {
-            Some("diff-hunk")
-        } else if line.starts_with("+++") || line.starts_with("---") || line.starts_with("diff ") {
-            Some("diff-meta")
-        } else if line.starts_with('+') {
-            Some("diff-add")
-        } else if line.starts_with('-') {
-            Some("diff-remove")
-        } else {
-            None
-        };
+    // Syntax-highlight code lines while keeping the add/remove cue. Two
+    // highlighters reconstruct the new (context+add) and old (context+remove)
+    // file states so each side colors correctly.
+    use syntect::easy::HighlightLines;
+    let (ss, ts) = syntax_assets();
+    let theme = &ts.themes[if is_dark() {
+        "base16-ocean.dark"
+    } else {
+        "InspiredGitHub"
+    }];
+    let plain = ss.find_syntax_plain_text();
+    let mut hl_new = HighlightLines::new(plain, theme);
+    let mut hl_old = HighlightLines::new(plain, theme);
+
+    let meta = |buffer: &gtk4::TextBuffer, line: &str| {
         let mut end = buffer.end_iter();
-        match tag {
-            Some(tag_name) => buffer.insert_with_tags_by_name(&mut end, line, &[tag_name]),
-            None => buffer.insert(&mut end, line),
+        buffer.insert_with_tags_by_name(&mut end, line, &["diff-meta"]);
+    };
+
+    for line in text.split_inclusive('\n') {
+        // File header: switch syntax + reset both highlighters.
+        if line.starts_with("+++") {
+            if let Some(path) = line.strip_prefix("+++ b/") {
+                let syntax = ss
+                    .find_syntax_for_file(path.trim_end())
+                    .ok()
+                    .flatten()
+                    .unwrap_or(plain);
+                hl_new = HighlightLines::new(syntax, theme);
+                hl_old = HighlightLines::new(syntax, theme);
+            }
+            meta(buffer, line);
+        } else if line.starts_with("---")
+            || line.starts_with("@@")
+            || line.starts_with("diff ")
+            || line.starts_with("index ")
+            || line.starts_with("new file")
+            || line.starts_with("deleted file")
+            || line.starts_with("rename ")
+            || line.starts_with("similarity ")
+            || line.starts_with("old mode")
+            || line.starts_with("new mode")
+            || line.starts_with('\\')
+        {
+            let tag = if line.starts_with("@@") {
+                "diff-hunk"
+            } else {
+                "diff-meta"
+            };
+            let mut end = buffer.end_iter();
+            buffer.insert_with_tags_by_name(&mut end, line, &[tag]);
+        } else if let Some(rest) = line.strip_prefix('+') {
+            let mut end = buffer.end_iter();
+            buffer.insert_with_tags_by_name(&mut end, "+", &["diff-add", "diff-add-bg"]);
+            insert_highlighted(buffer, &mut hl_new, ss, rest, Some("diff-add-bg"));
+        } else if let Some(rest) = line.strip_prefix('-') {
+            let mut end = buffer.end_iter();
+            buffer.insert_with_tags_by_name(&mut end, "-", &["diff-remove", "diff-remove-bg"]);
+            insert_highlighted(buffer, &mut hl_old, ss, rest, Some("diff-remove-bg"));
+        } else {
+            // Context line: feed both sides (advance old state), display new.
+            let rest = line.strip_prefix(' ').unwrap_or(line);
+            if line.starts_with(' ') {
+                let mut end = buffer.end_iter();
+                buffer.insert(&mut end, " ");
+            }
+            let _ = hl_old.highlight_line(rest, ss);
+            insert_highlighted(buffer, &mut hl_new, ss, rest, None);
         }
     }
 }
