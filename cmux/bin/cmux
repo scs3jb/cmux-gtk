@@ -747,6 +747,8 @@ case "$command" in
   overview) _cmux_json "system.overview" "{}" ;;
   palette) _cmux_json "system.command_palette" "{}" ;;
   dock) _cmux_json "system.dock" "{}" ;;
+  quick-terminal|quick) # quick-terminal [toggle|show|hide] — drop-down terminal
+    _cmux_json "system.quick_terminal" "{\"action\":\"${1:-toggle}\"}" ;;
   run) _cmux_json "system.run_command" "{\"name\":\"${1:-}\"}" ;;
   back)
     _cmux_act "focus_back"

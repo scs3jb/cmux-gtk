@@ -102,6 +102,10 @@ pub struct AppSettings {
     /// API, using ANTHROPIC_API_KEY) when an agent finishes, if it has no title.
     #[serde(default)]
     pub ai_auto_naming: bool,
+    /// Quake-style drop-down "quick terminal" (slides in from the top edge,
+    /// toggled by a global hotkey). Requires a `quick-terminal` feature build.
+    #[serde(default)]
+    pub quick_terminal: QuickTerminalSettings,
     /// Keyboard shortcuts.
     #[serde(skip)]
     pub shortcuts: shortcuts::ShortcutConfig,
@@ -805,6 +809,33 @@ fn default_true() -> bool {
     true
 }
 
+/// Quake-style drop-down quick terminal configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct QuickTerminalSettings {
+    /// Enable the quick terminal (only effective in a `quick-terminal` build).
+    pub enabled: bool,
+    /// Suggested global-shortcut trigger registered with the GlobalShortcuts
+    /// portal (xdg shortcut syntax, e.g. "CTRL+grave", "F12"). The user can
+    /// rebind it in their desktop's system settings.
+    pub hotkey: String,
+    /// Drop-down height as a fraction of the monitor height (0.1–1.0).
+    pub height_fraction: f32,
+    /// Slide animation duration in milliseconds.
+    pub animation_ms: u32,
+}
+
+impl Default for QuickTerminalSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            hotkey: "CTRL+grave".to_string(),
+            height_fraction: 0.45,
+            animation_ms: 150,
+        }
+    }
+}
+
 /// Action taken when a file is double-clicked in the sidebar file explorer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -896,6 +927,7 @@ impl Default for AppSettings {
             file_explorer_open_action: FileOpenAction::default(),
             preferred_editor: String::new(),
             ai_auto_naming: false,
+            quick_terminal: QuickTerminalSettings::default(),
             shortcuts: shortcuts::ShortcutConfig::default(),
         }
     }

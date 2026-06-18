@@ -498,6 +498,40 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
 
     appearance_page.add(&editor_group);
 
+    // ── Quick Terminal group ──
+    let qt_group = adw::PreferencesGroup::new();
+    qt_group.set_title("Quick Terminal");
+    qt_group.set_description(Some(
+        "A Quake-style drop-down terminal that slides in from the top edge, toggled by a global hotkey. Requires a quick-terminal build + a layer-shell compositor (KDE/wlroots).",
+    ));
+
+    let qt_enabled_row = adw::SwitchRow::new();
+    qt_enabled_row.set_title("Enable Quick Terminal");
+    qt_enabled_row.set_active(current_settings.quick_terminal.enabled);
+    qt_group.add(&qt_enabled_row);
+
+    let qt_hotkey_row = adw::EntryRow::new();
+    qt_hotkey_row.set_title("Global Hotkey");
+    qt_hotkey_row.set_tooltip_text(Some(
+        "Portal shortcut syntax, e.g. CTRL+grave or F12 (rebindable in system settings)",
+    ));
+    qt_hotkey_row.set_text(&current_settings.quick_terminal.hotkey);
+    qt_group.add(&qt_hotkey_row);
+
+    let qt_height_adj = gtk4::Adjustment::new(
+        (current_settings.quick_terminal.height_fraction * 100.0) as f64,
+        10.0,
+        100.0,
+        5.0,
+        10.0,
+        0.0,
+    );
+    let qt_height_row = adw::SpinRow::new(Some(&qt_height_adj), 1.0, 0);
+    qt_height_row.set_title("Height (% of screen)");
+    qt_group.add(&qt_height_row);
+
+    appearance_page.add(&qt_group);
+
     window.add(&appearance_page);
 
     // ── Notifications page ──
@@ -1253,6 +1287,12 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
                 ),
                 preferred_editor: preferred_editor_row.text().trim().to_string(),
                 ai_auto_naming: ai_auto_naming_row.is_active(),
+                quick_terminal: settings::QuickTerminalSettings {
+                    enabled: qt_enabled_row.is_active(),
+                    hotkey: qt_hotkey_row.text().trim().to_string(),
+                    height_fraction: (qt_height_row.value() as f32 / 100.0).clamp(0.1, 1.0),
+                    animation_ms: current_settings.quick_terminal.animation_ms,
+                },
                 shortcuts: shortcuts_state.borrow().clone(),
                 minimal_mode: current_settings.minimal_mode,
                 show_tab_close_button: show_tab_close_row.is_active(),

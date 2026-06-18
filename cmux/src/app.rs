@@ -257,6 +257,14 @@ impl AppState {
     }
 }
 
+/// Quick-terminal (drop-down) action requested by a hotkey or the socket.
+#[derive(Debug, Clone, Copy)]
+pub enum QuickTermAction {
+    Toggle,
+    Show,
+    Hide,
+}
+
 /// Messages from background tasks that require a UI refresh.
 #[derive(Debug)]
 pub enum UiEvent {
@@ -402,6 +410,8 @@ pub enum UiEvent {
     ShowDock,
     /// Run a custom command (from cmux.json) by name.
     RunCustomCommand(String),
+    /// Toggle / show / hide the Quake-style drop-down quick terminal.
+    QuickTerminal(QuickTermAction),
     /// Show or hide the left sidebar.
     /// `true` = show (expand), `false` = hide (collapse).
     ShowSidebar(bool),

@@ -757,6 +757,13 @@ pub(super) fn bind_shared_state_updates(
                     UiEvent::RunCustomCommand(name) => {
                         crate::ui::command_palette::run_custom_command_by_name(&name, &state);
                     }
+                    UiEvent::QuickTerminal(action) => {
+                        if let Some(window) = window_weak.upgrade() {
+                            if let Some(app) = window.application() {
+                                crate::ui::quick_terminal::handle(action, &app, &state);
+                            }
+                        }
+                    }
                     UiEvent::AgentResume => {
                         // Detect which agent (if any) is running in the focused
                         // terminal and send its resume command.
@@ -1024,6 +1031,7 @@ fn event_refresh_kind(event: &UiEvent) -> RefreshKind {
         | UiEvent::RefreshSurface { .. }
         | UiEvent::ClearHistory { .. }
         | UiEvent::TriggerFlash { .. }
+        | UiEvent::QuickTerminal(_)
         | UiEvent::ToggleMinimalMode => RefreshKind::None,
 
         // Task Manager opens a secondary window — no layout rebuild needed.

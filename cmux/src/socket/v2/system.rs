@@ -272,6 +272,25 @@ pub(super) fn handle_dock(id: Value, state: &Arc<SharedState>) -> Response {
     Response::success(id, serde_json::json!({"opened": true}))
 }
 
+/// `system.quick_terminal` — toggle/show/hide the drop-down quick terminal.
+pub(super) fn handle_quick_terminal(
+    id: Value,
+    params: &Value,
+    state: &Arc<SharedState>,
+) -> Response {
+    use crate::app::QuickTermAction;
+    let action = match params.get("action").and_then(|v| v.as_str()).unwrap_or("toggle") {
+        "show" => QuickTermAction::Show,
+        "hide" => QuickTermAction::Hide,
+        "toggle" => QuickTermAction::Toggle,
+        other => {
+            return Response::error(id, "invalid_params", &format!("Unknown action: {other}"));
+        }
+    };
+    state.send_ui_event(crate::app::UiEvent::QuickTerminal(action));
+    Response::success(id, serde_json::json!({"ok": true}))
+}
+
 /// `system.run_command` (`cmux run <name>`) — run a cmux.json custom command.
 pub(super) fn handle_run_command(id: Value, params: &Value, state: &Arc<SharedState>) -> Response {
     let Some(name) = params.get("name").and_then(|v| v.as_str()) else {
@@ -290,6 +309,7 @@ pub(super) fn handle_capabilities(id: Value) -> Response {
         "system.processes",
         "system.task_manager",
         "system.overview",
+        "system.quick_terminal",
         "system.command_palette",
         "system.dock",
         "system.run_command",

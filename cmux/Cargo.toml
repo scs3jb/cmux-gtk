@@ -8,6 +8,10 @@ description = "cmux terminal multiplexer for Linux (GTK4/libadwaita)"
 default = ["webkit"]
 link-ghostty = ["ghostty-gtk/link-ghostty"]
 webkit = ["dep:webkit6", "dep:pulldown-cmark", "dep:soup3"]
+# Quake-style drop-down quick terminal. Needs libgtk4-layer-shell at build/run
+# time and a layer-shell compositor (KDE/wlroots). Off by default.
+# (gtk4-layer-shell + ashpd deps are wired in once the window impl lands.)
+quick-terminal = []
 
 [[bin]]
 name = "cmux-app"

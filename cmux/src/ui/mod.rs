@@ -18,6 +18,7 @@ pub mod notifications_panel;
 pub mod omnibar;
 pub mod pane_overview;
 pub mod project_panel;
+pub mod quick_terminal;
 pub mod search_overlay;
 pub mod settings;
 pub mod sidebar;

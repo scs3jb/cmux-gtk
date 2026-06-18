@@ -142,6 +142,7 @@ pub fn dispatch(json_line: &str, state: &Arc<SharedState>) -> Response {
         "system.overview" => system::handle_overview(id, state),
         "system.command_palette" => system::handle_command_palette(id, state),
         "system.dock" => system::handle_dock(id, state),
+        "system.quick_terminal" => system::handle_quick_terminal(id, &req.params, state),
         "system.run_command" => system::handle_run_command(id, &req.params, state),
 
         // Workspace commands
