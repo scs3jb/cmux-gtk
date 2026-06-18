@@ -1080,8 +1080,14 @@ fn restore_session(state: &Rc<AppState>) -> Vec<Uuid> {
         return vec![];
     }
 
-    // Drop windows that have no workspaces or only empty workspaces
-    // (stale sessions from crashes/testing can leave windows with 0 panels)
+    // The quick terminal is recreated on demand, never restored — older session
+    // files may still contain its workspace, so filter it out everywhere.
+    let is_quick = |ws: &crate::session::snapshot::SessionWorkspaceSnapshot| {
+        ws.custom_title.as_deref() == Some("Quick Terminal")
+    };
+
+    // Drop windows that have no workspaces or only empty/quick-terminal
+    // workspaces (stale sessions can leave windows with 0 real panels).
     let live_windows: Vec<_> = snapshot
         .windows
         .iter()
@@ -1089,7 +1095,7 @@ fn restore_session(state: &Rc<AppState>) -> Vec<Uuid> {
             w.tab_manager
                 .workspaces
                 .iter()
-                .any(|ws| !ws.panels.is_empty())
+                .any(|ws| !ws.panels.is_empty() && !is_quick(ws))
         })
         .collect();
     if live_windows.len() < snapshot.windows.len() {
@@ -1137,8 +1143,8 @@ fn restore_session(state: &Rc<AppState>) -> Vec<Uuid> {
         }
 
         for ws_snapshot in &tm_snapshot.workspaces {
-            if ws_snapshot.panels.is_empty() {
-                continue; // Skip workspaces with no panels
+            if ws_snapshot.panels.is_empty() || is_quick(ws_snapshot) {
+                continue; // Skip empty + quick-terminal workspaces
             }
             let workspace = build_workspace_from_snapshot(
                 ws_snapshot,
