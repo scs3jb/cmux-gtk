@@ -30,6 +30,17 @@ fi
 
 echo "Installing cmux-gtk to $PREFIX"
 
+# Surface which build is being installed. The quick-terminal (quake) drop-down
+# is an opt-in cargo feature, and install.sh copies whatever was last built — so
+# a stray default build silently ships without the global hotkey/portal. Make
+# that state visible instead of mysterious.
+if grep -aqF 'org.freedesktop.portal.GlobalShortcuts' "$REL/cmux-app" 2>/dev/null; then
+  echo "  quick-terminal: ENABLED in this build"
+else
+  echo "  quick-terminal: NOT in this build — rebuild with"
+  echo "    cargo build --release --features cmux/link-ghostty,cmux/quick-terminal"
+fi
+
 install -Dm755 "$REL/cmux-app" "$PREFIX/bin/cmux-app"
 # Bash CLI wrapper is the canonical `cmux` (matches the in-terminal PATH prepend).
 install -Dm755 "$REPO_ROOT/cmux/bin/cmux" "$PREFIX/bin/cmux"
