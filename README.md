@@ -108,7 +108,7 @@ Fuzzy command palette and workspace switcher. Define your own entries in `cmux.j
 - **Per-workspace environment** — `workspace.env` in a `cmux.json` layout injects variables into every shell spawned in that workspace
 - **Pane overview** — status grid of every pane (busy/idle/attention) with click-to-jump (header button / palette / `overview.open`)
 - **Multi-window** — single-instance app; launching again opens a new window, workspaces assignable across windows
-- **Quick terminal** — Quake-style drop-down that slides in from the top edge (chromeless layer-shell overlay, no titlebar), toggled by a configurable global hotkey (GlobalShortcuts portal) or `cmux quick-terminal toggle`. Opt-in build (`--features cmux/quick-terminal`); enable + set the hotkey/height in **Settings → Quick Terminal**
+- **Quick terminal** — Quake-style drop-down that slides in from the top edge (top-anchored layer-shell overlay with the full cmux UI minus the OS maximize/close), toggled by a configurable global hotkey or `cmux quick-terminal toggle`. Opt-in build (`--features cmux/quick-terminal`); enable + set the hotkey/height in **Settings → Quick Terminal**. The hotkey registers via the GlobalShortcuts portal — on KDE it appears in **System Settings → Shortcuts** to assign; for a guaranteed system-wide key, bind `cmux quick-terminal toggle` to a custom shortcut there
 - **Workspace groups** — collapsible sidebar sections with per-group color, unread badges, drag-anchored membership, persistence (`cmux group`)
 - **Workspace management** — pinning, custom colors, reorder, close-others/above/below
 - **Workspace descriptions** — free-text per-workspace notes (`cmux describe`), shown in the sidebar tooltip

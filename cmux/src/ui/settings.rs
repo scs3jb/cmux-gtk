@@ -513,7 +513,9 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
     let qt_hotkey_row = adw::EntryRow::new();
     qt_hotkey_row.set_title("Global Hotkey");
     qt_hotkey_row.set_tooltip_text(Some(
-        "Portal shortcut syntax, e.g. CTRL+grave or F12 (rebindable in system settings)",
+        "Suggested trigger registered via the GlobalShortcuts portal (e.g. CTRL+grave, F12). \
+         Some desktops (KDE) list it in System Settings → Shortcuts for you to assign/confirm. \
+         As a reliable fallback, bind `cmux quick-terminal toggle` to a key in your desktop.",
     ));
     qt_hotkey_row.set_text(&current_settings.quick_terminal.hotkey);
     qt_group.add(&qt_hotkey_row);
