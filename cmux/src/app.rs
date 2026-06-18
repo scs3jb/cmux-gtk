@@ -618,7 +618,7 @@ pub fn run() -> i32 {
     {
         let shared_for_socket = shared.clone();
         let shared_for_ports = shared.clone();
-        app.connect_startup(move |_app| {
+        app.connect_startup(move |startup_app| {
             // Use the bundled app icon for windows / alt-tab / taskbar.
             gtk4::Window::set_default_icon_name("io.github.douglas.cmux_gtk");
             let shared = shared_for_socket.clone();
@@ -635,7 +635,10 @@ pub fn run() -> i32 {
 
             // Register the quick-terminal global hotkey (GlobalShortcuts portal)
             // if the feature build + setting are enabled.
-            crate::ui::quick_terminal::spawn_global_shortcut(shared_for_ports.clone());
+            crate::ui::quick_terminal::register_global_shortcut(
+                startup_app,
+                shared_for_ports.clone(),
+            );
         });
     }
 

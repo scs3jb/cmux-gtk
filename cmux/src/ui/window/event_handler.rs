@@ -86,13 +86,17 @@ pub(super) fn bind_shared_state_updates(
                             let lb = list_box.clone();
                             let cb = content_box.clone();
                             let st = Rc::clone(&state);
+                            let app = window.application();
                             crate::ui::settings::show_settings(&window, move || {
                                 super::refresh_ui(&lb, &cb, &st);
                                 // Register the quick-terminal hotkey if it was
                                 // just enabled (no-op otherwise / if already up).
-                                crate::ui::quick_terminal::spawn_global_shortcut(
-                                    st.shared.clone(),
-                                );
+                                if let Some(app) = &app {
+                                    crate::ui::quick_terminal::register_global_shortcut(
+                                        app,
+                                        st.shared.clone(),
+                                    );
+                                }
                             });
                         }
                     }

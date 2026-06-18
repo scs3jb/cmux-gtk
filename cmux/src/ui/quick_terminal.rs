@@ -34,37 +34,28 @@ mod imp;
 #[cfg(feature = "quick-terminal")]
 pub mod portal;
 
-/// Register the GlobalShortcuts portal hotkey on a dedicated thread, so the
-/// configured key toggles the quick terminal system-wide. Safe to call at
-/// startup and again whenever settings change — it's a no-op when the feature
-/// is off, when the quick terminal is disabled, or when a listener is already
-/// running.
-pub fn spawn_global_shortcut(shared: std::sync::Arc<crate::app::SharedState>) {
+/// Register the quick-terminal global shortcut via the GlobalShortcuts portal,
+/// using the GApplication's own D-Bus connection (so KDE shows its permission
+/// prompt). Runs on the GTK main thread. Safe to call at startup and again when
+/// settings change — it's idempotent and a no-op when the feature is off or the
+/// quick terminal is disabled. Pass the application (its D-Bus connection is
+/// used).
+pub fn register_global_shortcut(
+    app: &impl gtk4::prelude::IsA<gtk4::gio::Application>,
+    shared: std::sync::Arc<crate::app::SharedState>,
+) {
     #[cfg(feature = "quick-terminal")]
     {
-        use std::sync::atomic::{AtomicBool, Ordering};
-        static ACTIVE: AtomicBool = AtomicBool::new(false);
-
-        if !crate::settings::load().quick_terminal.enabled {
-            return;
+        use gtk4::prelude::ApplicationExt;
+        match app.as_ref().dbus_connection() {
+            Some(conn) => portal::register(&conn, shared),
+            None => tracing::warn!(
+                "quick terminal: no D-Bus connection available to register the global shortcut"
+            ),
         }
-        // Only one portal listener at a time.
-        if ACTIVE.swap(true, Ordering::SeqCst) {
-            return;
-        }
-        std::thread::spawn(move || {
-            match tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-            {
-                Ok(rt) => rt.block_on(portal::run(shared)),
-                Err(e) => tracing::warn!("quick terminal: tokio runtime for portal failed: {e}"),
-            }
-            ACTIVE.store(false, Ordering::SeqCst);
-        });
     }
     #[cfg(not(feature = "quick-terminal"))]
     {
-        let _ = shared;
+        let _ = (app.as_ref(), shared);
     }
 }
