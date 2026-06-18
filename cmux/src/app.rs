@@ -802,7 +802,7 @@ pub fn open_window(app: &adw::Application, state: &Rc<AppState>, window_id: Uuid
         }
     }
 
-    let window = ui::window::create_window(app, state, window_id, ui_event_rx);
+    let window = ui::window::create_window(app, state, window_id, ui_event_rx, false);
     window.present();
 }
 

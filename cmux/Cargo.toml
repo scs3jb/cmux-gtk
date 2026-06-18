@@ -10,8 +10,7 @@ link-ghostty = ["ghostty-gtk/link-ghostty"]
 webkit = ["dep:webkit6", "dep:pulldown-cmark", "dep:soup3"]
 # Quake-style drop-down quick terminal. Needs libgtk4-layer-shell at build/run
 # time and a layer-shell compositor (KDE/wlroots). Off by default.
-# (gtk4-layer-shell + ashpd deps are wired in once the window impl lands.)
-quick-terminal = []
+quick-terminal = ["dep:gtk4-layer-shell"]
 
 [[bin]]
 name = "cmux-app"
@@ -44,3 +43,4 @@ shell-escape = "0.1.5"
 hmac = { workspace = true }
 sha2 = { workspace = true }
 ureq = { version = "3", default-features = false, features = ["native-tls", "json"] }
+gtk4-layer-shell = { version = "0.8", optional = true }

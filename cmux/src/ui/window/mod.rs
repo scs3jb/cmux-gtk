@@ -27,6 +27,7 @@ pub fn create_window(
     state: &Rc<AppState>,
     window_id: uuid::Uuid,
     ui_events: UnboundedReceiver<UiEvent>,
+    chromeless: bool,
 ) -> adw::ApplicationWindow {
     styling::install_css();
 
@@ -66,7 +67,7 @@ pub fn create_window(
     let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     content_box.set_hexpand(true);
     content_box.set_vexpand(true);
-    rebuild_content(&content_box, state);
+    rebuild_content(&content_box, state, Some(window_id));
 
     // Search overlay wraps the content area
     let search = search_overlay::create_search_overlay(&content_box.clone().upcast(), state);
@@ -104,9 +105,15 @@ pub fn create_window(
     let toast_overlay = adw::ToastOverlay::new();
 
     let header = adw::HeaderBar::new();
-    // Minimal mode: hide the header bar for a distraction-free terminal.
-    if crate::settings::load().minimal_mode {
+    // Minimal mode (or a chromeless quick-terminal window): hide the header bar
+    // for a distraction-free terminal with no window controls.
+    if chromeless || crate::settings::load().minimal_mode {
         header.set_visible(false);
+    }
+    // Chromeless windows (quick terminal) also collapse the sidebar to content.
+    if chromeless {
+        split_view.set_collapsed(true);
+        split_view.set_show_content(true);
     }
 
     bind_sidebar_selection(&list_box, &content_box, state);
@@ -375,18 +382,42 @@ pub fn create_window(
 }
 
 /// Rebuild the content area from the current workspace layout.
-pub fn rebuild_content(content_box: &gtk4::Box, state: &Rc<AppState>) {
+/// The cmux window id (stored as the window's widget name) a widget lives in.
+fn window_id_of(widget: &gtk4::Widget) -> Option<uuid::Uuid> {
+    widget
+        .root()
+        .and_then(|r| r.downcast::<adw::ApplicationWindow>().ok())
+        .and_then(|w| uuid::Uuid::parse_str(&w.widget_name()).ok())
+}
+
+pub fn rebuild_content(content_box: &gtk4::Box, state: &Rc<AppState>, window_id: Option<uuid::Uuid>) {
     tracing::debug!("rebuild_content triggered");
-    // Unparent cached GL surfaces and browser widgets first
+
+    // Which window are we rendering for? Use the explicit id, else derive it
+    // from the content box's root window. Lets each window render its own
+    // workspace and avoid stealing GL surfaces that live in other windows.
+    let win_id = window_id.or_else(|| window_id_of(content_box.upcast_ref::<gtk4::Widget>()));
+    let same_window = |w: &gtk4::Widget| -> bool {
+        match (win_id, window_id_of(w)) {
+            (Some(ours), Some(theirs)) => ours == theirs,
+            _ => true,
+        }
+    };
+
+    // Unparent cached GL surfaces and browser widgets that belong to this window.
     for surface in state.terminal_cache.borrow().values() {
         if let Some(parent) = surface.parent() {
+            if !same_window(surface.upcast_ref::<gtk4::Widget>()) {
+                continue;
+            }
             if let Ok(parent_box) = parent.downcast::<gtk4::Box>() {
                 parent_box.remove(surface);
             }
         }
     }
     for browser_widget in state.browser_cache.borrow().values() {
-        if browser_widget.parent().is_some() {
+        if browser_widget.parent().is_some() && same_window(browser_widget.upcast_ref::<gtk4::Widget>())
+        {
             browser_widget.unparent();
         }
     }
@@ -399,7 +430,11 @@ pub fn rebuild_content(content_box: &gtk4::Box, state: &Rc<AppState>) {
     // Clone workspace data out of the lock so we don't hold it during widget construction.
     let workspace_data = {
         let tab_manager = lock_or_recover(&state.shared.tab_manager);
-        tab_manager.selected().map(|ws| {
+        let selected = match win_id {
+            Some(wid) => tab_manager.selected_for_window(wid),
+            None => tab_manager.selected(),
+        };
+        selected.map(|ws| {
             (
                 ws.id,
                 ws.layout.clone(),
@@ -445,7 +480,7 @@ fn refresh_ui(list_box: &gtk4::ListBox, content_box: &gtk4::Box, state: &Rc<AppS
     state.prune_terminal_cache();
     state.shared.cleanup_stale_remote_sessions();
     sidebar::refresh_sidebar(list_box, state);
-    rebuild_content(content_box, state);
+    rebuild_content(content_box, state, None);
     update_window_title(content_box, state);
 }
 
