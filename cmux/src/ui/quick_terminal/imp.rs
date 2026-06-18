@@ -26,6 +26,9 @@ struct QuickState {
     visible: bool,
     height: i32,
     current_margin: i32,
+    /// Slide tween duration (ms), read from settings once at creation so the
+    /// hide path doesn't touch disk on every toggle.
+    animation_ms: u32,
     /// Bumped on each slide; an in-flight tween stops when it's superseded.
     generation: u64,
 }
@@ -45,6 +48,12 @@ pub fn handle(action: QuickTermAction, app: &gtk4::Application, state: &Rc<AppSt
             };
             if show {
                 slide_in(qs);
+                // Route keystrokes to the drop-down terminal right away rather
+                // than waiting for the user to click it (present() raises it,
+                // this hands ghostty's focus to its surface).
+                if let Some(gapp) = state.ghostty_app.borrow().as_ref() {
+                    gapp.set_focus(true);
+                }
             } else {
                 slide_out(qs);
             }
@@ -107,6 +116,7 @@ fn ensure_window(app: &adw::Application, state: &Rc<AppState>) {
             visible: false,
             height,
             current_margin: -height,
+            animation_ms: cfg.animation_ms,
             generation: 0,
         });
     });
@@ -140,7 +150,7 @@ fn slide(qs: &mut QuickState, to: i32) {
     qs.current_margin = to;
     qs.generation += 1;
     let generation = qs.generation;
-    let duration = crate::settings::load().quick_terminal.animation_ms.max(1) as f64;
+    let duration = qs.animation_ms.max(1) as f64;
     let win = qs.window.clone();
     let hide_at_end = to < 0;
     let start = std::time::Instant::now();

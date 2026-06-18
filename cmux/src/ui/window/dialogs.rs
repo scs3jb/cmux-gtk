@@ -8,19 +8,22 @@ use libadwaita::prelude::*;
 
 use crate::app::{lock_or_recover, AppState};
 
-/// Show a dialog to rename the currently selected workspace.
-pub(super) fn show_rename_dialog(
+/// Build and present a standard "rename" dialog: a single text entry pre-filled
+/// with `current` plus Cancel/Rename responses, shown over `window`. `on_accept`
+/// receives the entered text when the user confirms. Centralises the scaffolding
+/// shared by the workspace/tab/group/index rename dialogs (in-surface, so it
+/// renders above the layer-shell quick-terminal overlay).
+pub(crate) fn present_rename_dialog(
     window: &adw::ApplicationWindow,
-    state: &Rc<AppState>,
-    list_box: &gtk4::ListBox,
-    content_box: &gtk4::Box,
-    current_title: &str,
+    heading: &str,
+    body: Option<&str>,
+    current: &str,
+    on_accept: impl Fn(String) + 'static,
 ) {
-    let dialog = adw::MessageDialog::new(Some(window), Some("Rename Workspace"), None);
-    dialog.set_body("Enter a new name for this workspace:");
+    let dialog = adw::AlertDialog::new(Some(heading), body);
 
     let entry = gtk4::Entry::new();
-    entry.set_text(current_title);
+    entry.set_text(current);
     entry.set_activates_default(true);
     dialog.set_extra_child(Some(&entry));
 
@@ -29,29 +32,46 @@ pub(super) fn show_rename_dialog(
     dialog.set_default_response(Some("rename"));
     dialog.set_response_appearance("rename", adw::ResponseAppearance::Suggested);
 
-    let state = state.clone();
-    let list_box = list_box.clone();
-    let content_box = content_box.clone();
-    dialog.connect_response(None, move |dialog, response| {
+    let entry_cb = entry.clone();
+    dialog.connect_response(None, move |_, response| {
         if response == "rename" {
-            let entry = dialog
-                .extra_child()
-                .and_then(|w| w.downcast::<gtk4::Entry>().ok());
-            if let Some(entry) = entry {
-                let new_name = entry.text().to_string();
-                if !new_name.is_empty() {
-                    let mut tm = lock_or_recover(&state.shared.tab_manager);
-                    if let Some(ws) = tm.selected_mut() {
-                        ws.custom_title = Some(new_name);
-                    }
-                    drop(tm);
-                    super::refresh_ui(&list_box, &content_box, &state);
-                }
-            }
+            on_accept(entry_cb.text().to_string());
         }
     });
 
-    dialog.present();
+    dialog.present(Some(window));
+    entry.grab_focus();
+    entry.select_region(0, -1);
+}
+
+/// Show a dialog to rename the currently selected workspace.
+pub(super) fn show_rename_dialog(
+    window: &adw::ApplicationWindow,
+    state: &Rc<AppState>,
+    list_box: &gtk4::ListBox,
+    content_box: &gtk4::Box,
+    current_title: &str,
+) {
+    let state = state.clone();
+    let list_box = list_box.clone();
+    let content_box = content_box.clone();
+    present_rename_dialog(
+        window,
+        "Rename Workspace",
+        Some("Enter a new name for this workspace:"),
+        current_title,
+        move |new_name| {
+            if new_name.is_empty() {
+                return;
+            }
+            let mut tm = lock_or_recover(&state.shared.tab_manager);
+            if let Some(ws) = tm.selected_mut() {
+                ws.custom_title = Some(new_name);
+            }
+            drop(tm);
+            super::refresh_ui(&list_box, &content_box, &state);
+        },
+    );
 }
 
 /// Show a dialog to rename a specific panel tab.
@@ -68,95 +88,22 @@ pub fn show_rename_tab_dialog(
             .unwrap_or_default()
     };
 
-    let dialog = gtk4::Window::builder()
-        .transient_for(window)
-        .modal(true)
-        .title("Rename Tab")
-        .default_width(320)
-        .build();
-
-    let vbox = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
-    vbox.set_margin_start(16);
-    vbox.set_margin_end(16);
-    vbox.set_margin_top(16);
-    vbox.set_margin_bottom(16);
-
-    let entry = gtk4::Entry::new();
-    entry.set_text(&current_title);
-    entry.set_activates_default(true);
-    vbox.append(&entry);
-
-    let btn_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-    btn_box.set_halign(gtk4::Align::End);
-
-    let cancel_btn = gtk4::Button::with_label("Cancel");
-    let ok_btn = gtk4::Button::with_label("Rename");
-    ok_btn.add_css_class("suggested-action");
-    btn_box.append(&cancel_btn);
-    btn_box.append(&ok_btn);
-    vbox.append(&btn_box);
-
-    dialog.set_child(Some(&vbox));
-
-    {
-        let dialog = dialog.clone();
-        cancel_btn.connect_clicked(move |_| dialog.close());
-    }
-
-    {
-        let state = state.clone();
-        let dialog = dialog.clone();
-        let entry = entry.clone();
-        ok_btn.connect_clicked(move |_| {
-            let new_title = entry.text().to_string();
-            let mut tm = lock_or_recover(&state.shared.tab_manager);
-            if let Some(ws) = tm.find_workspace_with_panel_mut(panel_id) {
-                if let Some(panel) = ws.panels.get_mut(&panel_id) {
-                    if new_title.is_empty() {
-                        panel.custom_title = None;
-                    } else {
-                        panel.custom_title = Some(new_title);
-                    }
-                }
+    let state = state.clone();
+    present_rename_dialog(window, "Rename Tab", None, &current_title, move |new_title| {
+        let mut tm = lock_or_recover(&state.shared.tab_manager);
+        if let Some(ws) = tm.find_workspace_with_panel_mut(panel_id) {
+            if let Some(panel) = ws.panels.get_mut(&panel_id) {
+                panel.custom_title = if new_title.is_empty() { None } else { Some(new_title) };
             }
-            drop(tm);
-            state.shared.notify_ui_refresh();
-            dialog.close();
-        });
-    }
-
-    // Enter activates OK
-    {
-        let ok_btn = ok_btn.clone();
-        entry.connect_activate(move |_| {
-            ok_btn.emit_clicked();
-        });
-    }
-
-    // Escape closes
-    let key_controller = gtk4::EventControllerKey::new();
-    {
-        let dialog = dialog.clone();
-        key_controller.connect_key_pressed(move |_, keyval, _, _| {
-            if keyval == gdk4::Key::Escape {
-                dialog.close();
-                glib::Propagation::Stop
-            } else {
-                glib::Propagation::Proceed
-            }
-        });
-    }
-    dialog.add_controller(key_controller);
-
-    dialog.present();
-    entry.grab_focus();
-    entry.select_region(0, -1);
+        }
+        drop(tm);
+        state.shared.notify_ui_refresh();
+    });
 }
 
 /// Show a dialog to create a new SSH workspace.
 pub fn show_ssh_dialog(window: &adw::ApplicationWindow, state: &Rc<AppState>) {
-    let dialog = adw::MessageDialog::new(
-        Some(window),
+    let dialog = adw::AlertDialog::new(
         Some("New SSH Workspace"),
         Some("Connect to a remote host via SSH"),
     );
@@ -243,5 +190,5 @@ pub fn show_ssh_dialog(window: &adw::ApplicationWindow, state: &Rc<AppState>) {
         state.shared.notify_ui_refresh();
     });
 
-    dialog.present();
+    dialog.present(Some(window));
 }

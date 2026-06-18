@@ -1238,35 +1238,22 @@ fn show_group_rename(
     group_id: uuid::Uuid,
     current_name: &str,
 ) {
-    use libadwaita::prelude::*;
-    let dialog = libadwaita::MessageDialog::new(Some(window), Some("Rename Group"), None);
-    let entry = gtk4::Entry::new();
-    entry.set_text(current_name);
-    entry.set_activates_default(true);
-    dialog.set_extra_child(Some(&entry));
-    dialog.add_response("cancel", "Cancel");
-    dialog.add_response("rename", "Rename");
-    dialog.set_default_response(Some("rename"));
-    dialog.set_response_appearance("rename", libadwaita::ResponseAppearance::Suggested);
-
     let state = state.clone();
-    let entry_for_cb = entry.clone();
-    dialog.connect_response(None, move |_, response| {
-        if response != "rename" {
-            return;
-        }
-        let name = entry_for_cb.text().to_string();
-        if name.trim().is_empty() {
-            return;
-        }
-        let mut tm = lock_or_recover(&state.shared.tab_manager);
-        tm.rename_group(group_id, name);
-        drop(tm);
-        state.shared.notify_ui_refresh();
-    });
-    dialog.present();
-    entry.grab_focus();
-    entry.select_region(0, -1);
+    crate::ui::window::dialogs::present_rename_dialog(
+        window,
+        "Rename Group",
+        None,
+        current_name,
+        move |name| {
+            if name.trim().is_empty() {
+                return;
+            }
+            let mut tm = lock_or_recover(&state.shared.tab_manager);
+            tm.rename_group(group_id, name);
+            drop(tm);
+            state.shared.notify_ui_refresh();
+        },
+    );
 }
 
 /// Set up right-click context menu on a sidebar row.
@@ -1915,9 +1902,13 @@ fn show_custom_color_picker(
     index: usize,
 ) {
     use gtk4::prelude::*;
+    use libadwaita::prelude::*;
 
-    let dialog = gtk4::ColorChooserDialog::new(Some("Choose Workspace Color"), Some(window));
-    dialog.set_use_alpha(false);
+    // In-surface dialog (renders above the layer-shell quick-terminal overlay)
+    // hosting an embeddable color chooser widget.
+    let dialog = libadwaita::AlertDialog::new(Some("Choose Workspace Color"), None);
+    let chooser = gtk4::ColorChooserWidget::new();
+    chooser.set_use_alpha(false);
 
     // Pre-select the current custom color if set
     let current_color = {
@@ -1926,13 +1917,20 @@ fn show_custom_color_picker(
     };
     if let Some(ref css_color) = current_color {
         let rgba = gdk4::RGBA::parse(css_color).unwrap_or(gdk4::RGBA::BLACK);
-        dialog.set_rgba(&rgba);
+        chooser.set_rgba(&rgba);
     }
+    dialog.set_extra_child(Some(&chooser));
+
+    dialog.add_response("cancel", "Cancel");
+    dialog.add_response("select", "Select");
+    dialog.set_default_response(Some("select"));
+    dialog.set_response_appearance("select", libadwaita::ResponseAppearance::Suggested);
 
     let state = state.clone();
-    dialog.connect_response(move |dlg, response| {
-        if response == gtk4::ResponseType::Ok {
-            let rgba = dlg.rgba();
+    let chooser_cb = chooser.clone();
+    dialog.connect_response(None, move |_, response| {
+        if response == "select" {
+            let rgba = chooser_cb.rgba();
             let css = format!(
                 "#{:02x}{:02x}{:02x}",
                 (rgba.red() * 255.0) as u8,
@@ -1946,10 +1944,9 @@ fn show_custom_color_picker(
             drop(tm);
             state.shared.notify_ui_refresh();
         }
-        dlg.close();
     });
 
-    dialog.present();
+    dialog.present(Some(window));
 }
 
 fn show_rename_for_index(
@@ -1958,43 +1955,24 @@ fn show_rename_for_index(
     index: usize,
     current_title: &str,
 ) {
-    use libadwaita::prelude::*;
-
-    let dialog =
-        libadwaita::MessageDialog::new(Some(window), Some("Rename Workspace"), None::<&str>);
-    dialog.set_body("Enter a new name for this workspace:");
-
-    let entry = gtk4::Entry::new();
-    entry.set_text(current_title);
-    entry.set_activates_default(true);
-    dialog.set_extra_child(Some(&entry));
-
-    dialog.add_response("cancel", "Cancel");
-    dialog.add_response("rename", "Rename");
-    dialog.set_default_response(Some("rename"));
-    dialog.set_response_appearance("rename", libadwaita::ResponseAppearance::Suggested);
-
     let state = state.clone();
-    dialog.connect_response(None::<&str>, move |dialog, response| {
-        if response == "rename" {
-            let entry = dialog
-                .extra_child()
-                .and_then(|w| w.downcast::<gtk4::Entry>().ok());
-            if let Some(entry) = entry {
-                let new_name = entry.text().to_string();
-                if !new_name.is_empty() {
-                    let mut tm = lock_or_recover(&state.shared.tab_manager);
-                    if let Some(ws) = tm.get_mut(index) {
-                        ws.custom_title = Some(new_name);
-                    }
-                    drop(tm);
-                    state.shared.notify_ui_refresh();
-                }
+    crate::ui::window::dialogs::present_rename_dialog(
+        window,
+        "Rename Workspace",
+        Some("Enter a new name for this workspace:"),
+        current_title,
+        move |new_name| {
+            if new_name.is_empty() {
+                return;
             }
-        }
-    });
-
-    dialog.present();
+            let mut tm = lock_or_recover(&state.shared.tab_manager);
+            if let Some(ws) = tm.get_mut(index) {
+                ws.custom_title = Some(new_name);
+            }
+            drop(tm);
+            state.shared.notify_ui_refresh();
+        },
+    );
 }
 
 /// Show a confirmation dialog before closing a non-pinned workspace that has active terminals.
@@ -2007,8 +1985,7 @@ fn show_close_tab_dialog(
     use libadwaita::prelude::*;
 
     let heading = format!("Close '{title}'?");
-    let dialog = libadwaita::MessageDialog::new(
-        Some(window),
+    let dialog = libadwaita::AlertDialog::new(
         Some(&heading),
         Some("This workspace has active terminals. Are you sure you want to close it?"),
     );
@@ -2024,7 +2001,7 @@ fn show_close_tab_dialog(
             state.shared.notify_ui_refresh();
         }
     });
-    dialog.present();
+    dialog.present(Some(window));
 }
 
 /// Show a confirmation dialog before closing a pinned workspace.
@@ -2037,8 +2014,7 @@ fn show_close_pinned_dialog(
     use libadwaita::prelude::*;
 
     let heading = format!("Close '{title}'?");
-    let dialog = libadwaita::MessageDialog::new(
-        Some(window),
+    let dialog = libadwaita::AlertDialog::new(
         Some(&heading),
         Some("This workspace is pinned. Are you sure you want to close it?"),
     );
@@ -2054,7 +2030,7 @@ fn show_close_pinned_dialog(
             state.shared.notify_ui_refresh();
         }
     });
-    dialog.present();
+    dialog.present(Some(window));
 }
 
 fn color_css_value(name: &str) -> &str {

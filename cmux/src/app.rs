@@ -651,11 +651,38 @@ pub fn run() -> i32 {
     let state_clone = state.clone();
     let init_flag = initialized.clone();
     app.connect_activate(move |app| {
-        if init_flag.replace(true) {
-            // Already running — a re-launch: open a fresh window.
-            open_window(app, &state_clone, Uuid::new_v4());
-        } else {
-            first_launch_init(app, &state_clone);
+        let first = !init_flag.replace(true);
+        let quake = quake_mode();
+        if first {
+            first_launch_init(app, &state_clone, quake);
+            if quake {
+                // Resident quake daemon: keep the process alive while the
+                // console is hidden so the global hotkey always has something to
+                // toggle. hold() returns a guard that releases on drop; forget
+                // it so the hold lasts the whole process (cmux is quit
+                // explicitly, e.g. `pkill cmux-app`), not just this closure.
+                std::mem::forget(app.hold());
+            }
+        }
+        if quake {
+            // Quake-console mode: every launch (first run, `cmux-app` re-launch,
+            // launcher/icon) drops the console down. Single instance, never a
+            // second main window. `handle` creates the drop-down on first use.
+            // Exception: an autostart launch (CMUX_QUAKE_HIDDEN) comes up hidden
+            // — resident and ready, but not in the user's face at login.
+            let action = if first && std::env::var_os("CMUX_QUAKE_HIDDEN").is_some() {
+                QuickTermAction::Hide
+            } else {
+                QuickTermAction::Show
+            };
+            crate::ui::quick_terminal::handle(
+                action,
+                app.upcast_ref::<gtk4::Application>(),
+                &state_clone,
+            );
+        } else if !first {
+            // Normal mode: a re-launch raises the existing window.
+            present_main_window(app, &state_clone);
         }
     });
 
@@ -669,7 +696,7 @@ pub fn run() -> i32 {
         let init_flag = initialized.clone();
         app.connect_open(move |app, files, _hint| {
             if !init_flag.replace(true) {
-                first_launch_init(app, &state_clone);
+                first_launch_init(app, &state_clone, quake_mode());
             }
             for file in files {
                 let uri = file.uri();
@@ -715,7 +742,7 @@ pub fn run() -> i32 {
 
 /// One-time per-process initialization: ghostty, theme, session restore, and
 /// the first window(s). Runs on the first `activate`/`open` only.
-fn first_launch_init(app: &adw::Application, state: &Rc<AppState>) {
+fn first_launch_init(app: &adw::Application, state: &Rc<AppState>, quake: bool) {
     // Remove socket password from environment so child terminal processes
     // cannot read it. The password is already cached by socket_password().
     std::env::remove_var("CMUX_SOCKET_PASSWORD");
@@ -737,8 +764,12 @@ fn first_launch_init(app: &adw::Application, state: &Rc<AppState>) {
     // Restore session after ghostty is initialized so terminals can be created
     let restored_window_ids = restore_session(state);
 
-    // Open windows — either restored or a fresh default
-    if restored_window_ids.is_empty() {
+    // Open windows — either restored or a fresh default. In quake-console mode
+    // we open no main window at all; `activate` drops the quick terminal down
+    // instead (the only window cmux shows).
+    if quake {
+        // no-op: the drop-down console is the entire UI
+    } else if restored_window_ids.is_empty() {
         open_window(app, state, Uuid::new_v4());
     } else {
         for window_id in restored_window_ids {
@@ -811,6 +842,30 @@ pub fn open_window(app: &adw::Application, state: &Rc<AppState>, window_id: Uuid
 
     let window = ui::window::create_window(app, state, window_id, ui_event_rx, false);
     window.present();
+}
+
+/// True when this build supports the drop-down quick terminal *and* the user
+/// has enabled it. In that "quake console" mode cmux is a single-instance
+/// drop-down: every launch drops the console down and no main window is opened.
+fn quake_mode() -> bool {
+    cfg!(feature = "quick-terminal") && crate::settings::load().quick_terminal.enabled
+}
+
+/// Raise the existing main window (single-window app). Skips the quick-terminal
+/// drop-down. If somehow no main window exists, opens a fresh one.
+pub fn present_main_window(app: &adw::Application, state: &Rc<AppState>) {
+    #[cfg(feature = "quick-terminal")]
+    let quick_id = crate::ui::quick_terminal::quick_window_id().to_string();
+    for win in app.windows() {
+        #[cfg(feature = "quick-terminal")]
+        if win.widget_name() == quick_id {
+            continue; // never surface the drop-down for a launcher re-activate
+        }
+        win.present();
+        return;
+    }
+    // No main window present (all closed) — open one.
+    open_window(app, state, Uuid::new_v4());
 }
 
 /// Remove all scrollback temp files left from the previous session.

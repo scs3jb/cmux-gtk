@@ -691,9 +691,9 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
                     } else {
                         ("Import Complete".to_string(), format!("Imported {count} cookies."))
                     };
-                    let dialog = libadwaita::MessageDialog::new(Some(&win), Some(&title), Some(&body));
+                    let dialog = libadwaita::AlertDialog::new(Some(&title), Some(&body));
                     dialog.add_response("ok", "OK");
-                    dialog.present();
+                    dialog.present(Some(&win));
                 });
             }
             row.add_suffix(&btn);

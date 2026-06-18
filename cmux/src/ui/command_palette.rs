@@ -32,14 +32,12 @@ pub fn show_command_palette(
     state: &Rc<AppState>,
     on_refresh: Rc<dyn Fn()>,
 ) {
-    let dialog = gtk4::Window::builder()
-        .transient_for(window)
-        .modal(true)
-        .decorated(false)
-        .default_width(480)
-        .default_height(400)
-        .build();
+    // In-surface dialog (adw::Dialog) rather than a separate top-level window,
+    // so it renders above the layer-shell quick-terminal overlay too.
+    let dialog = adw::Dialog::new();
     dialog.add_css_class("command-palette");
+    dialog.set_content_width(480);
+    dialog.set_content_height(400);
 
     let vbox = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
 
@@ -157,7 +155,7 @@ pub fn show_command_palette(
     }
     entry.add_controller(key_controller2);
 
-    dialog.present();
+    dialog.present(Some(window));
     entry.grab_focus();
 }
 
@@ -553,8 +551,7 @@ fn run_custom_command(
             .description
             .clone()
             .unwrap_or_else(|| format!("Run \u{201c}{}\u{201d}?", entry.name));
-        let dialog =
-            adw::MessageDialog::new(active_app_window().as_ref(), Some("Run command?"), Some(&body));
+        let dialog = adw::AlertDialog::new(Some("Run command?"), Some(&body));
         dialog.add_response("cancel", "Cancel");
         dialog.add_response("run", "Run");
         dialog.set_default_response(Some("run"));
@@ -570,7 +567,7 @@ fn run_custom_command(
                 on_refresh();
             }
         });
-        dialog.present();
+        dialog.present(active_app_window().as_ref());
         return;
     }
     do_custom_command(entry, base_dir, state);

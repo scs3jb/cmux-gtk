@@ -20,7 +20,22 @@ use gtk4::glib;
 
 use crate::app::{QuickTermAction, SharedState, UiEvent};
 
-const SHORTCUT_ID: &str = "toggle-quick-terminal";
+/// The shortcut id is *derived from the hotkey* rather than fixed. KDE persists
+/// global-shortcut state keyed by (app-id, shortcut-id) in kglobalshortcutsrc,
+/// and only honours `preferred_trigger` (and only shows the bind dialog) on the
+/// *first* registration of a given id — a later BindShortcuts with a changed
+/// trigger is silently ignored. Folding the hotkey into the id means every
+/// distinct hotkey is a brand-new shortcut to KDE, so changing the hotkey in
+/// settings actually re-binds (and re-prompts) instead of reusing a stale key.
+fn shortcut_id(hotkey: &str) -> String {
+    let slug: String = hotkey
+        .trim()
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    format!("quick-terminal-{}", slug.trim_matches('-'))
+}
 const PORTAL_DEST: &str = "org.freedesktop.portal.Desktop";
 const PORTAL_PATH: &str = "/org/freedesktop/portal/desktop";
 const GS_IFACE: &str = "org.freedesktop.portal.GlobalShortcuts";
@@ -146,8 +161,10 @@ fn bind_shortcuts(
     // Toggle whenever our shortcut activates (delivered on the GTK thread).
     // Subscribe broadly to Activated on the interface (no arg0 path filter,
     // which can be finicky) and check the shortcut id ourselves.
+    let shortcut_id = shortcut_id(hotkey);
     {
         let shared = shared.clone();
+        let want_id = shortcut_id.clone();
         conn.signal_subscribe(
             None,
             Some(GS_IFACE),
@@ -159,7 +176,7 @@ fn bind_shortcuts(
                 // params: (o session_handle, s shortcut_id, t timestamp, a{sv})
                 let id = params.child_value(1).get::<String>();
                 tracing::info!(?id, "quick terminal: portal Activated");
-                if id.as_deref() == Some(SHORTCUT_ID) {
+                if id.as_deref() == Some(want_id.as_str()) {
                     shared.send_ui_event(UiEvent::QuickTerminal(QuickTermAction::Toggle));
                 }
             },
@@ -180,7 +197,7 @@ fn bind_shortcuts(
         None,
         &format!(
             "(objectpath '{session_handle}', \
-             [('{SHORTCUT_ID}', {{'description': <'Toggle the cmux quick terminal'>, \
+             [('{shortcut_id}', {{'description': <'Toggle the cmux quick terminal'>, \
              'preferred_trigger': <'{hotkey}'>}})], \
              '', {{'handle_token': <'{request_token}'>}})"
         ),

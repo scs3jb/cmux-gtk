@@ -352,7 +352,7 @@ pub fn create_window(
                 return glib::Propagation::Proceed;
             }
 
-            let dialog = adw::MessageDialog::new(Some(window), Some("Quit cmux?"), None);
+            let dialog = adw::AlertDialog::new(Some("Quit cmux?"), None);
             dialog.add_css_class("cmux-confirm-dialog");
             dialog.set_body(&format!(
                 "There {} still active. Are you sure you want to quit?",
@@ -367,14 +367,14 @@ pub fn create_window(
             dialog.set_default_response(Some("cancel"));
             dialog.set_response_appearance("quit", adw::ResponseAppearance::Destructive);
 
-            let window = window.clone();
+            let window_cb = window.clone();
             dialog.connect_response(None, move |_, response| {
                 if response == "quit" {
-                    window.destroy();
+                    window_cb.destroy();
                 }
             });
 
-            dialog.present();
+            dialog.present(Some(window));
             glib::Propagation::Stop
         });
     }
@@ -389,6 +389,21 @@ fn window_id_of(widget: &gtk4::Widget) -> Option<uuid::Uuid> {
         .root()
         .and_then(|r| r.downcast::<adw::ApplicationWindow>().ok())
         .and_then(|w| uuid::Uuid::parse_str(&w.widget_name()).ok())
+}
+
+/// The workspace a `content_box` should render: its window's per-window
+/// selection, falling back to the global selection. Centralises the
+/// `window_id_of` → `selected_for_window` resolution so every per-window render
+/// path (focus visuals, title, …) stays consistent — a secondary window like
+/// the quake drop-down must not show the main window's workspace.
+fn workspace_for<'a>(
+    content_box: &gtk4::Box,
+    tm: &'a crate::model::TabManager,
+) -> Option<&'a Workspace> {
+    match window_id_of(content_box.upcast_ref::<gtk4::Widget>()) {
+        Some(wid) => tm.selected_for_window(wid),
+        None => tm.selected(),
+    }
 }
 
 pub fn rebuild_content(content_box: &gtk4::Box, state: &Rc<AppState>, window_id: Option<uuid::Uuid>) {
@@ -508,7 +523,10 @@ pub fn refresh_metadata(list_box: &gtk4::ListBox, content_box: &gtk4::Box, state
 fn update_focus_visuals(content_box: &gtk4::Box, state: &Rc<AppState>) {
     let focused_str = {
         let tm = lock_or_recover(&state.shared.tab_manager);
-        tm.selected()
+        // Resolve the focused panel from *this window's* workspace, not the
+        // global selection — otherwise a secondary window (e.g. the quake
+        // drop-down) highlights nothing and every pane renders unfocused/grey.
+        workspace_for(content_box, &tm)
             .and_then(|ws| ws.focused_panel_id)
             .map(|id| id.to_string())
     };
@@ -595,7 +613,9 @@ fn update_window_title(content_box: &gtk4::Box, state: &Rc<AppState>) {
         if let Some(window) = root.downcast_ref::<adw::ApplicationWindow>() {
             let titles = {
                 let tm = lock_or_recover(&state.shared.tab_manager);
-                tm.selected().map(|ws| {
+                // This window's own workspace, not the global selection, so the
+                // drop-down's title/dir match what it actually shows.
+                workspace_for(content_box, &tm).map(|ws| {
                     let title = ws.display_title();
                     let dir = crate::ui::sidebar::compact_path(&ws.current_directory);
                     (format!("{title} — {dir} — cmux"), title.to_string())
