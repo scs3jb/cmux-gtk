@@ -106,11 +106,7 @@ pub(super) fn handle_tab_close(id: Value, params: &Value, state: &Arc<SharedStat
 
     let closed = {
         let mut tm = lock_or_recover(&state.tab_manager);
-        if let Some(ws) = tm.find_workspace_with_panel_mut(panel_id) {
-            ws.remove_panel(panel_id)
-        } else {
-            false
-        }
+        tm.close_panel(panel_id)
     };
 
     if closed {

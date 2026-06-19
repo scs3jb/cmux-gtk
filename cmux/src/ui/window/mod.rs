@@ -493,11 +493,56 @@ pub fn rebuild_content(content_box: &gtk4::Box, state: &Rc<AppState>, window_id:
 }
 
 fn refresh_ui(list_box: &gtk4::ListBox, content_box: &gtk4::Box, state: &Rc<AppState>) {
+    // Closing the last tab closes its workspace; if that leaves no workspaces at
+    // all, enforce the "always something to show" invariant before rebuilding.
+    // Returns false when it quit the app — nothing left to render.
+    if !enforce_workspace_invariant(content_box, state) {
+        return;
+    }
     state.prune_terminal_cache();
     state.shared.cleanup_stale_remote_sessions();
     sidebar::refresh_sidebar(list_box, state);
     rebuild_content(content_box, state, None);
     update_window_title(content_box, state);
+}
+
+/// When the last workspace is closed, keep cmux in a sane state:
+/// - quake mode: spawn a fresh workspace + tab so the drop-down console is never
+///   empty (it must always have a workspace, or it would fall back to rendering
+///   the main window's selection);
+/// - otherwise: quit cmux — there are no workspaces or tabs left to show. A
+///   relaunch starts fresh with one workspace and one tab, like a first launch.
+///
+/// Returns true if the caller should continue rendering, false if it quit.
+fn enforce_workspace_invariant(content_box: &gtk4::Box, state: &Rc<AppState>) -> bool {
+    if lock_or_recover(&state.shared.tab_manager).iter().next().is_some() {
+        return true;
+    }
+    // The welcome screen legitimately shows no workspaces — don't act on it.
+    if crate::ui::welcome::should_show_welcome() {
+        return true;
+    }
+
+    if crate::app::quake_mode() {
+        let window_id = window_id_of(content_box.upcast_ref::<gtk4::Widget>())
+            .unwrap_or_else(crate::ui::quick_terminal::quick_window_id);
+        let mut ws = Workspace::new();
+        ws.window_id = Some(window_id);
+        ws.custom_title = Some("Quick Terminal".to_string());
+        let mut tm = lock_or_recover(&state.shared.tab_manager);
+        let id = tm.add_workspace(ws);
+        tm.select_for_window(window_id, id);
+        true
+    } else {
+        if let Some(app) = content_box
+            .root()
+            .and_then(|r| r.downcast::<adw::ApplicationWindow>().ok())
+            .and_then(|w| w.application())
+        {
+            app.quit();
+        }
+        false
+    }
 }
 
 /// Lightweight refresh for metadata-only changes (title, PWD, git branch).

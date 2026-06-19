@@ -176,14 +176,9 @@ pub(super) fn setup_shortcuts(
                             "close.tab" => {
                                 let closed = {
                                     let mut tm = lock_or_recover(&state.shared.tab_manager);
-                                    if let Some(ws) = tm.selected_mut() {
-                                        if let Some(panel_id) = ws.focused_panel_id {
-                                            ws.remove_panel(panel_id)
-                                        } else {
-                                            false
-                                        }
-                                    } else {
-                                        false
+                                    match tm.selected().and_then(|ws| ws.focused_panel_id) {
+                                        Some(panel_id) => tm.close_panel(panel_id),
+                                        None => false,
                                     }
                                 };
                                 if closed {
@@ -590,9 +585,10 @@ pub(super) fn setup_shortcuts(
             (gdk4::Key::Q, true, true) => {
                 let closed = {
                     let mut tm = lock_or_recover(&state.shared.tab_manager);
-                    if let Some(ws) = tm.selected_mut() {
-                        if let Some(panel_id) = ws.focused_panel_id {
-                            // Capture browser URL before closing
+                    let panel_id = tm.selected().and_then(|ws| ws.focused_panel_id);
+                    if let Some(panel_id) = panel_id {
+                        // Capture browser URL before closing.
+                        if let Some(ws) = tm.selected() {
                             if let Some(panel) = ws.panels.get(&panel_id) {
                                 if panel.panel_type == PanelType::Browser {
                                     if let Some(ref url) = panel.browser_url {
@@ -600,10 +596,8 @@ pub(super) fn setup_shortcuts(
                                     }
                                 }
                             }
-                            ws.remove_panel(panel_id)
-                        } else {
-                            false
                         }
+                        tm.close_panel(panel_id)
                     } else {
                         false
                     }

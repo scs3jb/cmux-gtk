@@ -693,10 +693,8 @@ fn execute_action(name: &str, state: &Rc<AppState>, on_refresh: &Rc<dyn Fn()>) {
         }
         "pane.close" => {
             let mut tm = lock_or_recover(&state.shared.tab_manager);
-            if let Some(ws) = tm.selected_mut() {
-                if let Some(panel_id) = ws.focused_panel_id {
-                    ws.remove_panel(panel_id);
-                }
+            if let Some(panel_id) = tm.selected().and_then(|ws| ws.focused_panel_id) {
+                tm.close_panel(panel_id);
             }
         }
         "workspace.close" => {
@@ -921,10 +919,8 @@ fn execute_action(name: &str, state: &Rc<AppState>, on_refresh: &Rc<dyn Fn()>) {
         }
         "tab.close" => {
             let mut tm = lock_or_recover(&state.shared.tab_manager);
-            if let Some(ws) = tm.selected_mut() {
-                if let Some(panel_id) = ws.focused_panel_id {
-                    ws.remove_panel(panel_id);
-                }
+            if let Some(panel_id) = tm.selected().and_then(|ws| ws.focused_panel_id) {
+                tm.close_panel(panel_id);
             }
         }
         "tab.reopen" => {

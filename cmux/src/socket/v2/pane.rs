@@ -181,16 +181,7 @@ pub(super) fn handle_pane_close(id: Value, params: &Value, state: &Arc<SharedSta
             return Response::error(id, "not_found", "No workspace selected");
         };
 
-        if let Some(ws) = tm.find_workspace_with_panel_mut(target_panel_id) {
-            let removed = ws.remove_panel(target_panel_id);
-            if removed && ws.is_empty() {
-                let ws_id = ws.id;
-                tm.remove_by_id(ws_id);
-            }
-            removed
-        } else {
-            false
-        }
+        tm.close_panel(target_panel_id)
     };
 
     if closed {

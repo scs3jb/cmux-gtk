@@ -213,13 +213,11 @@ impl AppState {
     pub fn close_panel(&self, panel_id: Uuid, process_alive: bool) -> bool {
         {
             let mut tab_manager = lock_or_recover(&self.shared.tab_manager);
-            let Some(workspace) = tab_manager.find_workspace_with_panel_mut(panel_id) else {
-                return false;
-            };
-            if !workspace.remove_panel(panel_id) {
+            // Closing the last tab closes its workspace; the UI refresh then
+            // enforces the no-empty-app invariant (quake recreates, else quits).
+            if !tab_manager.close_panel(panel_id) {
                 return false;
             }
-            // Keep workspace alive even when empty (parity with macOS behavior)
         }
 
         self.terminal_cache.borrow_mut().remove(&panel_id);
@@ -847,7 +845,7 @@ pub fn open_window(app: &adw::Application, state: &Rc<AppState>, window_id: Uuid
 /// True when this build supports the drop-down quick terminal *and* the user
 /// has enabled it. In that "quake console" mode cmux is a single-instance
 /// drop-down: every launch drops the console down and no main window is opened.
-fn quake_mode() -> bool {
+pub(crate) fn quake_mode() -> bool {
     cfg!(feature = "quick-terminal") && crate::settings::load().quick_terminal.enabled
 }
 
@@ -2059,7 +2057,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn close_panel_keeps_workspace_alive() {
+    fn close_panel_closes_empty_workspace() {
         let shared = Arc::new(SharedState::new());
         let state = AppState::new(shared.clone());
         let panel_id = shared
@@ -2071,10 +2069,9 @@ mod tests {
             .expect("workspace should have a focused panel");
 
         assert!(state.close_panel(panel_id, false));
-        // Workspace stays alive even after closing its last panel
+        // Closing the last tab closes the workspace too.
         let tm = shared.tab_manager.lock().unwrap();
-        assert_eq!(tm.len(), 1);
-        assert!(tm.selected().unwrap().is_empty());
+        assert_eq!(tm.len(), 0);
     }
 
     #[test]

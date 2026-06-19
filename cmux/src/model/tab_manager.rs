@@ -273,6 +273,21 @@ impl TabManager {
         self.remove(index)
     }
 
+    /// Close the tab `panel_id` wherever it lives. If it was the workspace's last
+    /// tab, remove the workspace too — "closing the last tab closes the
+    /// workspace." Returns true if the panel was found and removed.
+    pub fn close_panel(&mut self, panel_id: Uuid) -> bool {
+        let Some(ws) = self.find_workspace_with_panel_mut(panel_id) else {
+            return false;
+        };
+        let removed = ws.remove_panel(panel_id);
+        if removed && ws.is_empty() {
+            let ws_id = ws.id;
+            self.remove_by_id(ws_id);
+        }
+        removed
+    }
+
     /// Get a workspace by ID.
     pub fn workspace(&self, id: Uuid) -> Option<&Workspace> {
         self.workspaces.iter().find(|w| w.id == id)

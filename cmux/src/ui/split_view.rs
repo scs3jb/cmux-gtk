@@ -404,12 +404,8 @@ fn build_tab_button(
         {
             let state = Rc::clone(state);
             close_btn.connect_clicked(move |_| {
-                let mut tm = lock_or_recover(&state.shared.tab_manager);
-                if let Some(ws) = tm.find_workspace_with_panel_mut(panel_id) {
-                    ws.remove_panel(panel_id);
-                    // Keep workspace alive even when empty
-                }
-                drop(tm);
+                // Closing the last tab closes the workspace (TabManager::close_panel).
+                lock_or_recover(&state.shared.tab_manager).close_panel(panel_id);
                 state.shared.notify_ui_refresh();
             });
         }
@@ -463,12 +459,7 @@ fn build_tab_button(
     {
         let state = Rc::clone(state);
         close_action.connect_activate(move |_, _| {
-            let mut tm = lock_or_recover(&state.shared.tab_manager);
-            if let Some(ws) = tm.find_workspace_with_panel_mut(panel_id) {
-                ws.remove_panel(panel_id);
-                // Keep workspace alive even when empty
-            }
-            drop(tm);
+            lock_or_recover(&state.shared.tab_manager).close_panel(panel_id);
             state.shared.notify_ui_refresh();
         });
     }
@@ -500,11 +491,7 @@ fn build_tab_button(
         let state = Rc::clone(state);
         middle_click.connect_pressed(move |gesture, _n, _x, _y| {
             gesture.set_state(gtk4::EventSequenceState::Claimed);
-            let mut tm = lock_or_recover(&state.shared.tab_manager);
-            if let Some(ws) = tm.find_workspace_with_panel_mut(panel_id) {
-                ws.remove_panel(panel_id);
-            }
-            drop(tm);
+            lock_or_recover(&state.shared.tab_manager).close_panel(panel_id);
             state.shared.notify_ui_refresh();
         });
     }
