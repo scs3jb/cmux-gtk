@@ -124,15 +124,19 @@ fn ensure_window(app: &adw::Application, state: &Rc<AppState>) {
 
 fn slide_in(qs: &mut QuickState) {
     qs.visible = true;
-    // Cancel any in-flight hide tween, then map on-screen. Layer surfaces that
-    // *map* off the screen edge aren't slid on by every compositor, so showing
-    // is immediate; hiding animates (an already-mapped surface moving off-screen
-    // reconfigures fine).
-    qs.generation += 1;
-    qs.current_margin = 0;
-    qs.window.set_margin(Edge::Top, 0);
-    qs.window.set_visible(true);
-    qs.window.present(); // map + raise + focus
+    qs.window.set_keyboard_mode(KeyboardMode::OnDemand);
+    if !qs.window.is_visible() {
+        // First show: map just above the top edge (off-screen) so the
+        // compositor's one-time window-open effect plays out of view. The
+        // surface then STAYS mapped — hide only slides it off-screen — so every
+        // later show is a pure margin slide with no re-map and no open effect
+        // (which otherwise reads as an expand-from-center).
+        qs.current_margin = -qs.height;
+        qs.window.set_margin(Edge::Top, -qs.height);
+        qs.window.set_visible(true);
+    }
+    qs.window.present(); // raise + focus (no re-map once already mapped)
+    slide(qs, 0);
 }
 
 fn slide_out(qs: &mut QuickState) {
@@ -141,13 +145,14 @@ fn slide_out(qs: &mut QuickState) {
 }
 
 /// Animate the layer-shell top margin from its current value to `to` with a
-/// glib-timeout tween (ease-out cubic). The window stays mapped throughout
+/// glib-timeout tween (ease-out cubic). Used for both show (slide down, `to` 0)
+/// and hide (slide up, `to` -height). The window stays mapped throughout
 /// (off-screen above the top edge when hidden). A frame-clock-driven adw
 /// animation does not run reliably on a just-mapped layer surface, so we step
-/// the margin manually.
+/// the margin manually, recording the live position each frame so a toggle
+/// mid-animation reverses smoothly.
 fn slide(qs: &mut QuickState, to: i32) {
     let from = qs.current_margin;
-    qs.current_margin = to;
     qs.generation += 1;
     let generation = qs.generation;
     let duration = qs.animation_ms.max(1) as f64;
@@ -155,17 +160,28 @@ fn slide(qs: &mut QuickState, to: i32) {
     let hide_at_end = to < 0;
     let start = std::time::Instant::now();
     glib::timeout_add_local(std::time::Duration::from_millis(16), move || {
-        // Stop if a newer slide superseded this one (or the window is gone).
-        if QUICK.with(|q| q.borrow().as_ref().map(|s| s.generation)) != Some(generation) {
-            return glib::ControlFlow::Break;
-        }
         let t = (start.elapsed().as_secs_f64() * 1000.0 / duration).min(1.0);
         let eased = 1.0 - (1.0 - t).powi(3);
         let v = (from as f64 + (to - from) as f64 * eased).round() as i32;
+        // Stop if a newer slide superseded this one (or the window is gone);
+        // otherwise record the live margin so a reversing toggle starts here.
+        let superseded = QUICK.with(|q| match q.borrow_mut().as_mut() {
+            Some(s) if s.generation == generation => {
+                s.current_margin = v;
+                false
+            }
+            _ => true,
+        });
+        if superseded {
+            return glib::ControlFlow::Break;
+        }
         win.set_margin(Edge::Top, v);
         if t >= 1.0 {
             if hide_at_end {
-                win.set_visible(false);
+                // Stay mapped (parked off-screen) so the next show is a slide,
+                // not a re-map; just release the keyboard so the hidden console
+                // doesn't keep eating input.
+                win.set_keyboard_mode(KeyboardMode::None);
             }
             glib::ControlFlow::Break
         } else {
