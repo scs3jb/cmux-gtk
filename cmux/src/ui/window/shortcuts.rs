@@ -182,6 +182,7 @@ pub(super) fn setup_shortcuts(
                                     }
                                 };
                                 if closed {
+                                    super::request_terminal_focus();
                                     super::refresh_ui(&list_box, &content_box, &state);
                                 }
                             }
@@ -603,6 +604,7 @@ pub(super) fn setup_shortcuts(
                     }
                 };
                 if closed {
+                    super::request_terminal_focus();
                     super::refresh_ui(&list_box, &content_box, &state);
                 }
                 glib::Propagation::Stop

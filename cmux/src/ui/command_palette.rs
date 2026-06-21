@@ -695,6 +695,7 @@ fn execute_action(name: &str, state: &Rc<AppState>, on_refresh: &Rc<dyn Fn()>) {
             let mut tm = lock_or_recover(&state.shared.tab_manager);
             if let Some(panel_id) = tm.selected().and_then(|ws| ws.focused_panel_id) {
                 tm.close_panel(panel_id);
+                crate::ui::window::request_terminal_focus();
             }
         }
         "workspace.close" => {
@@ -921,6 +922,7 @@ fn execute_action(name: &str, state: &Rc<AppState>, on_refresh: &Rc<dyn Fn()>) {
             let mut tm = lock_or_recover(&state.shared.tab_manager);
             if let Some(panel_id) = tm.selected().and_then(|ws| ws.focused_panel_id) {
                 tm.close_panel(panel_id);
+                crate::ui::window::request_terminal_focus();
             }
         }
         "tab.reopen" => {

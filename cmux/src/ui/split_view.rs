@@ -411,6 +411,7 @@ fn build_tab_button(
             close_btn.connect_clicked(move |_| {
                 // Closing the last tab closes the workspace (TabManager::close_panel).
                 lock_or_recover(&state.shared.tab_manager).close_panel(panel_id);
+                crate::ui::window::request_terminal_focus();
                 state.shared.notify_ui_refresh();
             });
         }
@@ -465,6 +466,7 @@ fn build_tab_button(
         let state = Rc::clone(state);
         close_action.connect_activate(move |_, _| {
             lock_or_recover(&state.shared.tab_manager).close_panel(panel_id);
+            crate::ui::window::request_terminal_focus();
             state.shared.notify_ui_refresh();
         });
     }
@@ -497,6 +499,7 @@ fn build_tab_button(
         middle_click.connect_pressed(move |gesture, _n, _x, _y| {
             gesture.set_state(gtk4::EventSequenceState::Claimed);
             lock_or_recover(&state.shared.tab_manager).close_panel(panel_id);
+            crate::ui::window::request_terminal_focus();
             state.shared.notify_ui_refresh();
         });
     }

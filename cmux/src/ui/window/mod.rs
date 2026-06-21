@@ -406,6 +406,20 @@ fn workspace_for<'a>(
     }
 }
 
+thread_local! {
+    /// Set by an interactive tab-close path; the next content rebuild grabs
+    /// keyboard focus on the active pane's terminal so typing goes straight to
+    /// the now-focused (left) tab instead of staying on a button or nowhere.
+    static FOCUS_ACTIVE_TERMINAL: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Request that the next `rebuild_content` focus the active pane's terminal.
+/// Call from tab-close handlers after closing; the focus grab is deferred to the
+/// rebuild so it runs once the (reused) terminal surfaces are re-parented.
+pub(crate) fn request_terminal_focus() {
+    FOCUS_ACTIVE_TERMINAL.with(|f| f.set(true));
+}
+
 pub fn rebuild_content(content_box: &gtk4::Box, state: &Rc<AppState>, window_id: Option<uuid::Uuid>) {
     tracing::debug!("rebuild_content triggered");
 
@@ -489,6 +503,20 @@ pub fn rebuild_content(content_box: &gtk4::Box, state: &Rc<AppState>, window_id:
         let label = gtk4::Label::new(Some("No workspace selected"));
         label.add_css_class("dim-label");
         content_box.append(&label);
+    }
+
+    // A tab was just closed — move keyboard focus onto the now-active pane's
+    // terminal (surfaces are re-parented above, so this runs at the right time).
+    if FOCUS_ACTIVE_TERMINAL.with(|f| f.replace(false)) {
+        let focused = {
+            let tm = lock_or_recover(&state.shared.tab_manager);
+            tm.selected().and_then(|ws| ws.focused_panel_id)
+        };
+        if let Some(pid) = focused {
+            if let Some(surface) = state.terminal_cache.borrow().get(&pid) {
+                surface.grab_focus();
+            }
+        }
     }
 }
 
