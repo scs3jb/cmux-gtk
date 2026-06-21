@@ -25,6 +25,28 @@ The **quick terminal** (Quake-style drop-down) is an opt-in build that needs `gt
 cargo build --release --features cmux/link-ghostty,cmux/quick-terminal
 ```
 
+### Browser location services
+
+The integrated browser prompts for location/camera/mic permissions, but the
+actual position comes from the system **GeoClue2** service — install it for
+geolocation to resolve (`sudo pacman -S geoclue` on Arch). cmux warns in the
+prompt when it's missing.
+
+GeoClue 2.7+ removed the Mozilla Location Service, so WiFi-based lookups now
+need a backend URL. Uncomment a provider such as [BeaconDB](https://beacondb.net)
+in `/etc/geoclue/geoclue.conf` under `[wifi]`:
+
+```ini
+[wifi]
+enable=true
+url=https://api.beacondb.net/v1/geolocate
+```
+
+then restart it so the new config is read: `sudo pkill -x geoclue` (it
+re-activates on the next request). WiFi geolocation requires a WiFi adapter with
+access points in range — without GeoClue or a backend, cmux still shows the
+prompt but the lookup times out.
+
 ---
 
 ## Highlights

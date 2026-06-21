@@ -150,6 +150,23 @@ fn wire_download_handling(session: &webkit6::NetworkSession) {
 ///   +-- find_bar (HBox): [find_entry] [prev] [next] [match_count] [close]  (hidden by default)
 ///   +-- web_view (WebView): fills remaining space
 /// ```
+/// Whether the GeoClue2 system location service is installed (D-Bus activatable).
+/// WebKitGTK's built-in geolocation provider needs it; without it a granted
+/// location permission still fails. Checked once via the D-Bus service file.
+fn geoclue_available() -> bool {
+    use std::sync::OnceLock;
+    static AVAIL: OnceLock<bool> = OnceLock::new();
+    *AVAIL.get_or_init(|| {
+        [
+            "/usr/share/dbus-1/system-services/org.freedesktop.GeoClue2.service",
+            "/usr/lib/dbus-1.0/system-services/org.freedesktop.GeoClue2.service",
+            "/usr/local/share/dbus-1/system-services/org.freedesktop.GeoClue2.service",
+        ]
+        .iter()
+        .any(|p| std::path::Path::new(p).exists())
+    })
+}
+
 pub fn create_browser_widget(
     panel_id: uuid::Uuid,
     initial_url: Option<&str>,
@@ -982,30 +999,63 @@ pub fn create_browser_widget_with_profile(
         });
     }
 
-    // -- Permission requests (camera, microphone, geolocation) --
+    // -- Permission requests (geolocation, camera/mic, notifications, …) --
+    // Ask the user (Allow/Deny) rather than silently denying, like a normal
+    // browser. The prompt defaults to Deny and is an in-surface adw::AlertDialog
+    // so it also works inside the layer-shell quake window.
+    //
+    // NOTE on WebAuthn / Passkeys / FIDO2: WebKitGTK 6.0 handles WebAuthn
+    // internally (Arch builds with ENABLE_WEB_AUTHN=ON) and drives its own UI —
+    // it does NOT route through WebKitPermissionRequest, so it's unaffected here.
     {
+        use libadwaita::prelude::*;
         use webkit6::prelude::PermissionRequestExt;
-        web_view.connect_permission_request(|_wv, request| {
-            // Deny all permission requests by default. Granting camera, microphone,
-            // or geolocation to arbitrary web pages is a security/privacy risk.
-            //
-            // NOTE on WebAuthn / Passkeys / FIDO2:
-            // WebKitGTK 6.0 (2.52) handles WebAuthn internally when built with
-            // ENABLE_WEB_AUTHN=ON in the distro package (Arch's webkitgtk-6.0 has
-            // it enabled). When supported, the engine drives its own UI for
-            // hardware security keys via libfido2 — it does NOT route through
-            // WebKitPermissionRequest, so this blanket deny does not block it.
-            //
-            // The webkit6 0.6.1 Rust bindings currently expose no WebAuthn API
-            // surface (no WebAuthnPermissionRequest type, no WebSettings flag,
-            // no FFI symbols). Full feature parity with the macOS cmux bridge
-            // (custom navigator.credentials.{create,get} bridge via
-            // AuthenticationServices) would require linking libfido2 directly,
-            // implementing a CTAP2 transport, and providing a custom UI — that
-            // is intentionally out of scope here. See CHANGELOG cmux PRs
-            // #2660, #2727, #2905, #2908 for the macOS reference implementation.
-            request.deny();
-            true
+        web_view.connect_permission_request(move |wv, request| {
+            let is_geo = request.is::<webkit6::GeolocationPermissionRequest>();
+            let kind = if is_geo {
+                "access your location"
+            } else if request.is::<webkit6::UserMediaPermissionRequest>() {
+                "use your camera and microphone"
+            } else if request.is::<webkit6::NotificationPermissionRequest>() {
+                "show notifications"
+            } else if request.is::<webkit6::PointerLockPermissionRequest>() {
+                "lock your pointer"
+            } else if request.is::<webkit6::DeviceInfoPermissionRequest>() {
+                "access device information"
+            } else {
+                "use a browser permission"
+            };
+            let host = wv
+                .uri()
+                .map(|u| util::extract_host(&u))
+                .filter(|h| !h.is_empty())
+                .unwrap_or_else(|| "This site".to_string());
+
+            let mut body = format!("{host} wants to {kind}.");
+            if is_geo && !geoclue_available() {
+                body.push_str(
+                    "\n\nLocation needs the GeoClue service, which isn't installed. \
+                     Install the \u{201c}geoclue\u{201d} package \u{2014} otherwise the \
+                     lookup will fail even after you allow it.",
+                );
+            }
+            let dialog = libadwaita::AlertDialog::new(Some("Permission request"), Some(&body));
+            dialog.add_response("deny", "Deny");
+            dialog.add_response("allow", "Allow");
+            dialog.set_default_response(Some("deny"));
+            dialog.set_close_response("deny");
+            dialog.set_response_appearance("allow", libadwaita::ResponseAppearance::Suggested);
+
+            let request = request.clone();
+            dialog.connect_response(None, move |_, resp| {
+                if resp == "allow" {
+                    request.allow();
+                } else {
+                    request.deny();
+                }
+            });
+            dialog.present(Some(wv));
+            true // responding asynchronously once the user chooses
         });
     }
 
