@@ -13,7 +13,6 @@ use libadwaita::prelude::*;
 use crate::ui::dock::{self, DockControl};
 
 struct ControlRow {
-    expander: adw::ExpanderRow,
     id: adw::EntryRow,
     title: adw::EntryRow,
     command: adw::EntryRow,
@@ -131,7 +130,6 @@ fn add_control_row(
 
     group.add(&expander);
     rows.borrow_mut().push(ControlRow {
-        expander,
         id: id_row,
         title: title_row,
         command: command_row,

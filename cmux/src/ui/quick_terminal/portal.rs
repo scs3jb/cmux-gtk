@@ -77,30 +77,31 @@ fn on_request_response<F>(conn: &gio::DBusConnection, path: &str, on_response: F
 where
     F: Fn(&gio::DBusConnection, glib::Variant) + 'static,
 {
-    let sub_id = std::rc::Rc::new(std::cell::Cell::new(None));
-    let sub_id_cb = sub_id.clone();
-    let id = conn.signal_subscribe(
+    // Hold the subscription guard in a cell so the callback can drop it to
+    // unsubscribe after firing exactly once (dropping the guard is what the
+    // old signal_unsubscribe(id) call did).
+    let sub = std::rc::Rc::new(std::cell::Cell::new(None));
+    let sub_cb = sub.clone();
+    let subscription = conn.subscribe_to_signal(
         None,
         Some("org.freedesktop.portal.Request"),
         Some("Response"),
         Some(path),
         None,
         gio::DBusSignalFlags::NONE,
-        move |conn, _sender, _path, _iface, _signal, params| {
-            // Fire once.
-            if let Some(id) = sub_id_cb.take() {
-                conn.signal_unsubscribe(id);
-            }
-            // params: (u response, a{sv} results)
-            let code = params.child_value(0).get::<u32>().unwrap_or(2);
+        move |signal| {
+            // Fire once: drop the subscription guard to unsubscribe.
+            drop(sub_cb.take());
+            // parameters: (u response, a{sv} results)
+            let code = signal.parameters.child_value(0).get::<u32>().unwrap_or(2);
             if code != 0 {
                 tracing::warn!(code, "quick terminal: portal request not granted");
                 return;
             }
-            on_response(conn, params.child_value(1));
+            on_response(signal.connection, signal.parameters.child_value(1));
         },
     );
-    sub_id.set(Some(id));
+    sub.set(Some(subscription));
 }
 
 fn create_session(conn: gio::DBusConnection, shared: Arc<SharedState>, hotkey: String) {
@@ -165,22 +166,26 @@ fn bind_shortcuts(
     {
         let shared = shared.clone();
         let want_id = shortcut_id.clone();
-        conn.signal_subscribe(
+        let subscription = conn.subscribe_to_signal(
             None,
             Some(GS_IFACE),
             Some("Activated"),
             Some(PORTAL_PATH),
             None,
             gio::DBusSignalFlags::NONE,
-            move |_conn, _sender, _path, _iface, _signal, params| {
-                // params: (o session_handle, s shortcut_id, t timestamp, a{sv})
-                let id = params.child_value(1).get::<String>();
+            move |signal| {
+                // parameters: (o session_handle, s shortcut_id, t timestamp, a{sv})
+                let id = signal.parameters.child_value(1).get::<String>();
                 tracing::info!(?id, "quick terminal: portal Activated");
                 if id.as_deref() == Some(want_id.as_str()) {
                     shared.send_ui_event(UiEvent::QuickTerminal(QuickTermAction::Toggle));
                 }
             },
         );
+        // Process-lifetime subscription: the hotkey must keep toggling for the
+        // life of the app, so leak the guard instead of unsubscribing on drop
+        // (mirrors the prior signal_subscribe whose id was intentionally dropped).
+        std::mem::forget(subscription);
     }
 
     let request_token = gen_token("cmux_req_");
