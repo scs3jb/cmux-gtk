@@ -81,6 +81,12 @@ impl RemoteRpcClient {
                 "ServerAliveCountMax=2",
                 "-o",
                 "StrictHostKeyChecking=accept-new",
+                // The daemon connection needs no port forwarding; clearing the
+                // user's ~/.ssh/config LocalForward/RemoteForward directives keeps
+                // it from binding (and colliding on) ports like a LocalForward
+                // 8443 that belong to the interactive session.
+                "-o",
+                "ClearAllForwardings=yes",
             ])
             .args(ssh_args)
             // Pass daemon path and args directly — avoids sh -c shell injection risk.

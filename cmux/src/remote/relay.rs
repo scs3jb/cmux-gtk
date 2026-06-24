@@ -113,8 +113,7 @@ impl RelayServer {
         ssh_args: &[String],
         remote_daemon_path: &str,
     ) -> Result<u16, String> {
-        // Use a fixed remote port range to find an available one
-        // We try port 0 which lets SSH allocate
+        // Pick the first free port in the configured range on the remote.
         let remote_port = allocate_remote_port(ssh_args)?;
 
         let forward_spec = format!("127.0.0.1:{}:127.0.0.1:{}", remote_port, self.local_port);
@@ -124,9 +123,15 @@ impl RelayServer {
             "Starting SSH reverse tunnel"
         );
 
+        // Deliberately NO ExitOnForwardFailure: this connection inherits the
+        // user's ~/.ssh/config, which may carry an unrelated LocalForward (e.g.
+        // `LocalForward 8443`) already bound by the interactive session. With
+        // ExitOnForwardFailure=yes that collision would tear down the whole
+        // tunnel — and the CLI relay with it. Without it, a failed LocalForward
+        // is just a harmless warning and our `-R` is what matters. We verify the
+        // reverse forward came up below instead of relying on the exit code.
         let child = Command::new("ssh")
             .args(["-N", "-T", "-S", "none"])
-            .args(["-o", "ExitOnForwardFailure=yes"])
             .args(["-o", "ConnectTimeout=6"])
             .args(["-R", &forward_spec])
             .args(ssh_args)
@@ -149,6 +154,24 @@ impl RelayServer {
             &self.auth_token,
             remote_daemon_path,
         )?;
+
+        // Verify the reverse forward is actually listening — without
+        // ExitOnForwardFailure a failed `-R` would otherwise be silent. The
+        // probe clears forwardings so it can't contend the session's ports.
+        let listening = ssh_command(
+            ssh_args,
+            &format!("ss -tlnH 2>/dev/null | grep -q ':{remote_port} '"),
+            4,
+        )
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+        if !listening {
+            tracing::warn!(
+                remote_port,
+                "reverse tunnel port not listening on remote; CLI relay may be unavailable"
+            );
+        }
 
         Ok(remote_port)
     }

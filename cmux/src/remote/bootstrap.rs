@@ -145,6 +145,10 @@ pub(crate) fn ssh_command(ssh_args: &[String], remote_cmd: &str, connect_timeout
     cmd.args(["-T", "-S", "none"])
         .arg("-o")
         .arg(format!("ConnectTimeout={connect_timeout}"))
+        // One-shot probes need no port forwarding; clear the user's
+        // ~/.ssh/config LocalForward/RemoteForward so they don't bind (and
+        // collide on) the interactive session's forwarded ports.
+        .args(["-o", "ClearAllForwardings=yes"])
         .args(ssh_args)
         .arg(remote_cmd);
     cmd
