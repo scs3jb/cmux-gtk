@@ -75,7 +75,7 @@ pub fn check_remote_binary(ssh_args: &[String], remote_path: &str) -> bool {
         .args(ssh_args)
         .arg(format!(
             "test -x {} && echo OK",
-            shell_escape::escape(remote_path.into())
+            remote_shell_path(remote_path)
         ))
         .output();
 
@@ -127,6 +127,18 @@ pub fn build_daemon_locally(
     Ok(output_path)
 }
 
+/// Render a remote path that may begin with `~/` into a shell token the remote
+/// shell will expand to an absolute path. `shell_escape::escape` quotes the
+/// leading tilde, which defeats expansion — the shell then creates/looks up a
+/// literal `~` directory instead of `$HOME`. Expand `~/` to `"$HOME"/` and
+/// escape only the remainder so a path like `~/.cmux/bin/x` resolves correctly.
+fn remote_shell_path(path: &str) -> String {
+    match path.strip_prefix("~/") {
+        Some(rest) => format!("\"$HOME\"/{}", shell_escape::escape(rest.into())),
+        None => shell_escape::escape(path.into()).into_owned(),
+    }
+}
+
 /// Upload a local binary to the remote host via scp.
 pub fn upload_daemon(
     ssh_args: &[String],
@@ -138,7 +150,7 @@ pub fn upload_daemon(
     let mkdir_status = Command::new("ssh")
         .args(["-T", "-S", "none", "-o", "ConnectTimeout=6"])
         .args(ssh_args)
-        .arg(format!("mkdir -p {}", shell_escape::escape(dir.into())))
+        .arg(format!("mkdir -p {}", remote_shell_path(dir)))
         .status()
         .map_err(|e| format!("Failed to create remote directory: {}", e))?;
 
@@ -203,10 +215,7 @@ pub fn upload_daemon(
     let chmod_status = Command::new("ssh")
         .args(["-T", "-S", "none", "-o", "ConnectTimeout=6"])
         .args(ssh_args)
-        .arg(format!(
-            "chmod +x {}",
-            shell_escape::escape(remote_path.into())
-        ))
+        .arg(format!("chmod +x {}", remote_shell_path(remote_path)))
         .status()
         .map_err(|e| format!("chmod failed: {}", e))?;
 
@@ -439,6 +448,21 @@ fn daemon_version() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_remote_shell_path_expands_tilde() {
+        // A leading ~/ must become "$HOME"/… so the remote shell expands it;
+        // quoting the tilde (the old bug) created a literal `~` directory and
+        // broke the subsequent scp to the real $HOME path.
+        let p = remote_shell_path("~/.cmux/bin/cmuxd-remote/1.2.3/linux-amd64");
+        assert_eq!(p, "\"$HOME\"/.cmux/bin/cmuxd-remote/1.2.3/linux-amd64");
+        assert!(p.starts_with("\"$HOME\"/"), "got: {p}");
+        // Absolute paths are escaped as-is.
+        assert_eq!(remote_shell_path("/tmp/x"), "/tmp/x");
+        // A space in the remainder is quoted, but the tilde still expands.
+        let q = remote_shell_path("~/a b");
+        assert!(q.starts_with("\"$HOME\"/") && q.contains("'a b'"), "got: {q}");
+    }
 
     #[test]
     fn test_remote_daemon_path_format() {
