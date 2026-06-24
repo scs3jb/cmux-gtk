@@ -197,6 +197,40 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
     remote_ssh_row.set_active(current_settings.remote_ssh_enabled);
     behavior_group.add(&remote_ssh_row);
 
+    let relay_ports_start_row = adw::SpinRow::new(
+        Some(&gtk4::Adjustment::new(
+            current_settings.remote_relay_ports.start as f64,
+            1024.0,
+            65535.0,
+            1.0,
+            10.0,
+            0.0,
+        )),
+        1.0,
+        0,
+    );
+    relay_ports_start_row.set_title("Relay Port Range Start");
+    relay_ports_start_row
+        .set_subtitle("First port scanned on the remote host for the cmux CLI relay tunnel");
+    behavior_group.add(&relay_ports_start_row);
+
+    let relay_ports_end_row = adw::SpinRow::new(
+        Some(&gtk4::Adjustment::new(
+            current_settings.remote_relay_ports.end as f64,
+            1024.0,
+            65535.0,
+            1.0,
+            10.0,
+            0.0,
+        )),
+        1.0,
+        0,
+    );
+    relay_ports_end_row.set_title("Relay Port Range End");
+    relay_ports_end_row
+        .set_subtitle("Last port scanned on the remote host for the cmux CLI relay tunnel");
+    behavior_group.add(&relay_ports_end_row);
+
     appearance_page.add(&behavior_group);
 
     // ── Sidebar display group ──
@@ -1240,7 +1274,10 @@ pub fn show_settings(parent: &adw::ApplicationWindow, on_close: impl Fn() + 'sta
                 pane_flash_enabled: flash_row.is_active(),
                 link_routing: settings::load().link_routing,
                 remote_ssh_enabled: remote_ssh_row.is_active(),
-                remote_relay_ports: current_settings.remote_relay_ports,
+                remote_relay_ports: settings::RemotePortRange {
+                    start: relay_ports_start_row.value() as u16,
+                    end: relay_ports_end_row.value() as u16,
+                },
                 persist_scrollback: current_settings.persist_scrollback,
                 warn_before_closing_tab: warn_close_tab_row.is_active(),
                 copy_on_select: copy_on_select_row.is_active(),

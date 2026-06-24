@@ -22,10 +22,7 @@ pub struct RemotePlatform {
 
 /// Probe the remote host to detect OS and architecture.
 pub fn probe_platform(ssh_args: &[String]) -> Result<RemotePlatform, String> {
-    let output = Command::new("ssh")
-        .args(["-T", "-S", "none", "-o", "ConnectTimeout=6"])
-        .args(ssh_args)
-        .arg("uname -s && uname -m")
+    let output = ssh_command(ssh_args, "uname -s && uname -m", 6)
         .output()
         .map_err(|e| format!("Failed to run SSH probe: {}", e))?;
 
@@ -70,14 +67,9 @@ pub fn remote_daemon_path(version: &str, platform: &RemotePlatform) -> String {
 
 /// Check if the daemon binary exists on the remote host.
 pub fn check_remote_binary(ssh_args: &[String], remote_path: &str) -> bool {
-    let output = Command::new("ssh")
-        .args(["-T", "-S", "none", "-o", "ConnectTimeout=6"])
-        .args(ssh_args)
-        .arg(format!(
-            "test -x {} && echo OK",
-            remote_shell_path(remote_path)
-        ))
-        .output();
+    let output =
+        ssh_command(ssh_args, &format!("test -x {} && echo OK", remote_shell_path(remote_path)), 6)
+            .output();
 
     match output {
         Ok(out) => out.status.success() && String::from_utf8_lossy(&out.stdout).trim() == "OK",
@@ -132,11 +124,30 @@ pub fn build_daemon_locally(
 /// leading tilde, which defeats expansion — the shell then creates/looks up a
 /// literal `~` directory instead of `$HOME`. Expand `~/` to `"$HOME"/` and
 /// escape only the remainder so a path like `~/.cmux/bin/x` resolves correctly.
-fn remote_shell_path(path: &str) -> String {
+pub(crate) fn remote_shell_path(path: &str) -> String {
+    if path == "~" {
+        return "\"$HOME\"".to_string();
+    }
     match path.strip_prefix("~/") {
         Some(rest) => format!("\"$HOME\"/{}", shell_escape::escape(rest.into())),
         None => shell_escape::escape(path.into()).into_owned(),
     }
+}
+
+/// Build an `ssh` command that runs a single one-shot remote shell command with
+/// the shared hardening flags (`-T -S none -o ConnectTimeout=<secs>`). All the
+/// one-shot probes (uname, mkdir, chmod, test, relay metadata, port scan) go
+/// through this so the flag set lives in one place. The long-lived reverse
+/// tunnel needs different flags (`-N -R`, ExitOnForwardFailure) and is built
+/// inline in relay.rs.
+pub(crate) fn ssh_command(ssh_args: &[String], remote_cmd: &str, connect_timeout: u32) -> Command {
+    let mut cmd = Command::new("ssh");
+    cmd.args(["-T", "-S", "none"])
+        .arg("-o")
+        .arg(format!("ConnectTimeout={connect_timeout}"))
+        .args(ssh_args)
+        .arg(remote_cmd);
+    cmd
 }
 
 /// Upload a local binary to the remote host via scp.
@@ -147,10 +158,7 @@ pub fn upload_daemon(
 ) -> Result<(), String> {
     // Create remote directory
     let dir = remote_path.rsplit_once('/').map(|(d, _)| d).unwrap_or("~");
-    let mkdir_status = Command::new("ssh")
-        .args(["-T", "-S", "none", "-o", "ConnectTimeout=6"])
-        .args(ssh_args)
-        .arg(format!("mkdir -p {}", remote_shell_path(dir)))
+    let mkdir_status = ssh_command(ssh_args, &format!("mkdir -p {}", remote_shell_path(dir)), 6)
         .status()
         .map_err(|e| format!("Failed to create remote directory: {}", e))?;
 
@@ -212,12 +220,10 @@ pub fn upload_daemon(
     }
 
     // Make executable
-    let chmod_status = Command::new("ssh")
-        .args(["-T", "-S", "none", "-o", "ConnectTimeout=6"])
-        .args(ssh_args)
-        .arg(format!("chmod +x {}", remote_shell_path(remote_path)))
-        .status()
-        .map_err(|e| format!("chmod failed: {}", e))?;
+    let chmod_status =
+        ssh_command(ssh_args, &format!("chmod +x {}", remote_shell_path(remote_path)), 6)
+            .status()
+            .map_err(|e| format!("chmod failed: {}", e))?;
 
     if !chmod_status.success() {
         return Err("Failed to chmod daemon binary".to_string());
@@ -459,6 +465,8 @@ mod tests {
         assert!(p.starts_with("\"$HOME\"/"), "got: {p}");
         // Absolute paths are escaped as-is.
         assert_eq!(remote_shell_path("/tmp/x"), "/tmp/x");
+        // A bare ~ expands to $HOME (not a quoted literal `~`).
+        assert_eq!(remote_shell_path("~"), "\"$HOME\"");
         // A space in the remainder is quoted, but the tilde still expands.
         let q = remote_shell_path("~/a b");
         assert!(q.starts_with("\"$HOME\"/") && q.contains("'a b'"), "got: {q}");

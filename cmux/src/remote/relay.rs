@@ -6,6 +6,7 @@
 //! 3. Remote cmux wrapper dials the relay port to send commands
 //! 4. Relay forwards commands to the local cmux Unix socket
 
+use super::bootstrap::{remote_shell_path, ssh_command};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::process::{Child, Command, Stdio};
@@ -285,29 +286,47 @@ fn forward_to_socket(socket_path: &str, command: &str) -> Result<String, String>
 
 /// Find an available port on the remote host for the reverse tunnel.
 ///
-/// Scans the configured `remote_relay_ports` range (default 10000–10100) and
-/// returns the first free port, so concurrent remote sessions don't collide.
+/// Returns the first free port in the configured `remote_relay_ports` range
+/// (default 10000–10100), so concurrent remote sessions don't collide. The
+/// whole range is checked in a single SSH round-trip: `ss` dumps the listening
+/// ports once and an `awk` one-liner picks the first port not in use — far
+/// cheaper than one SSH handshake per port.
 fn allocate_remote_port(ssh_args: &[String]) -> Result<u16, String> {
-    let (start, end) = crate::settings::load().remote_relay_ports.bounds();
-    for port in (start..=end).rev() {
-        let check = Command::new("ssh")
-            .args(["-T", "-S", "none", "-o", "ConnectTimeout=4"])
-            .args(ssh_args)
-            .arg(format!(
-                "! ss -tlnp 2>/dev/null | grep -q ':{} ' && echo OK || echo USED",
-                port
-            ))
-            .output();
+    let range = crate::settings::load().remote_relay_ports;
+    let (start, end) = range.bounds();
+    if range.end < range.start {
+        tracing::warn!(
+            configured_start = range.start,
+            configured_end = range.end,
+            used_start = start,
+            used_end = end,
+            "remote_relay_ports has end < start; falling back to the default range"
+        );
+    }
 
-        match check {
-            Ok(out) if String::from_utf8_lossy(&out.stdout).trim() == "OK" => {
+    // Single remote command: collect listening ports from `ss`, then print the
+    // first port in [start, end] that isn't among them. `$4` is local
+    // address:port; the port is the field after the last colon (handles IPv4,
+    // IPv6 and `*:port`). Awk is single-quoted so the remote shell leaves it be.
+    let script = format!(
+        "ss -tlnH 2>/dev/null | awk '{{n=split($4,a,\":\"); u[a[n]]=1}} \
+         END{{for(p={start};p<={end};p++) if(!(p in u)){{print p; exit}}}}'"
+    );
+    if let Ok(out) = ssh_command(ssh_args, &script, 4).output() {
+        if let Ok(port) = String::from_utf8_lossy(&out.stdout).trim().parse::<u16>() {
+            if (start..=end).contains(&port) {
                 return Ok(port);
             }
-            _ => continue,
         }
     }
 
-    // Fallback: use the low end of the range and hope for the best.
+    // Fallback: no free port found (or the probe failed) — use the low end and
+    // let the reverse tunnel's ExitOnForwardFailure surface a real collision.
+    tracing::warn!(
+        start,
+        end,
+        "no free remote port found in range; falling back to {start}"
+    );
     Ok(start)
 }
 
@@ -323,11 +342,14 @@ fn install_remote_metadata(
     auth_token: &str,
     daemon_path: &str,
 ) -> Result<(), String> {
-    let esc_daemon = shell_escape::escape(daemon_path.into());
     // Shell-escape the relay credentials even though they are safe ASCII;
     // this provides defence-in-depth if the generation ever changes.
     let esc_relay_id = shell_escape::escape(relay_id.into());
     let esc_auth_token = shell_escape::escape(auth_token.into());
+    // Symlink target for the daemon. `remote_shell_path` expands a leading `~/`
+    // to `"$HOME"/…` so the remote shell resolves it (plain shell_escape would
+    // quote the tilde and create a literal `~` path).
+    let daemon_target = remote_shell_path(daemon_path);
 
     // Write JSON: {"relay_id":"...","relay_token":"..."} (matches Go relayAuthState)
     // chmod 700 the relay dir and 600 the auth file so only the owner can read them.
@@ -340,18 +362,12 @@ fn install_remote_metadata(
     // it at the socket_addr *file* breaks every command. Leaving it unset makes the
     // CLI read the relay address from ~/.cmux/socket_addr and enables its
     // stale-address refresh when a later session rewrites that file with a new port.
-    // The daemon path may begin with `~/` (shell_escape
-    // quotes the tilde, blocking expansion), so expand a leading `~/` to $HOME with
-    // POSIX parameter substitution before creating the symlink.
     let script = format!(
         r#"mkdir -p ~/.cmux/relay ~/.cmux/bin && chmod 700 ~/.cmux/relay
 echo '127.0.0.1:{remote_port}' > ~/.cmux/socket_addr
 printf '{{"relay_id":"%s","relay_token":"%s"}}' {esc_relay_id} {esc_auth_token} > ~/.cmux/relay/{remote_port}.auth
 chmod 600 ~/.cmux/relay/{remote_port}.auth
-echo {esc_daemon} > ~/.cmux/relay/{remote_port}.daemon_path
-CMUX_DAEMON={esc_daemon}
-case "$CMUX_DAEMON" in "~/"*) CMUX_DAEMON="$HOME/${{CMUX_DAEMON#"~/"}}" ;; esac
-ln -sf "$CMUX_DAEMON" "$HOME/.cmux/bin/cmux"
+ln -sf {daemon_target} "$HOME/.cmux/bin/cmux"
 printf 'export PATH="$HOME/.cmux/bin:$PATH"\n' > "$HOME/.cmux/bin/cmux-env.sh"
 chmod 600 "$HOME/.cmux/bin/cmux-env.sh"
 for rc in "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.zshrc" "$HOME/.profile"; do
@@ -362,13 +378,10 @@ done"#,
         remote_port = remote_port,
         esc_relay_id = esc_relay_id,
         esc_auth_token = esc_auth_token,
-        esc_daemon = esc_daemon,
+        daemon_target = daemon_target,
     );
 
-    let status = Command::new("ssh")
-        .args(["-T", "-S", "none", "-o", "ConnectTimeout=6"])
-        .args(ssh_args)
-        .arg(script.trim())
+    let status = ssh_command(ssh_args, script.trim(), 6)
         .status()
         .map_err(|e| format!("Failed to install relay metadata: {}", e))?;
 
