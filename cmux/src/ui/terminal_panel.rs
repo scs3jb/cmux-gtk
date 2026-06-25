@@ -89,12 +89,17 @@ pub fn create_panel_widget(
             panel.markdown_file.as_deref(),
             is_attention_source,
         ),
-        // Editable notes (plain GTK).
-        PanelType::Notes => super::notes_panel::create_notes_widget(
-            panel.id,
-            panel.markdown_file.as_deref(),
-            is_attention_source,
-        ),
+        // Editable notes (plain GTK). Context-scoped tabs are derived from the
+        // owning workspace's directory / remote destination.
+        PanelType::Notes => {
+            let ctx = super::notes_panel::resolve_context(panel.id, state);
+            super::notes_panel::create_notes_widget(
+                panel.id,
+                panel.markdown_file.as_deref(),
+                ctx,
+                is_attention_source,
+            )
+        }
         // History pane — needs live state to list/reopen closed workspaces.
         PanelType::History => {
             super::history_panel::create_history_widget(panel.id, state, is_attention_source)

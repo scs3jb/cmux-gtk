@@ -1619,6 +1619,26 @@ pub fn apply_theme_from_settings() {
         );
     }
 
+    // Notes-panel scope colours — Global / Host / Folder tab groups. A small
+    // coloured dot precedes each tab's filename so scopes read as groups.
+    {
+        let css = "\
+.notes-dot { min-width: 8px; min-height: 8px; border-radius: 4px; margin-right: 4px; }\n\
+.notes-dot-global { background-color: #3584e4; }\n\
+.notes-dot-host { background-color: #c061cb; }\n\
+.notes-dot-folder { background-color: #33d17a; }\n\
+.notes-tab-global label { color: #3584e4; }\n\
+.notes-tab-host label { color: #c061cb; }\n\
+.notes-tab-folder label { color: #33d17a; }\n";
+        let provider = gtk4::CssProvider::new();
+        provider.load_from_data(css);
+        gtk4::style_context_add_provider_for_display(
+            &display,
+            &provider,
+            gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
+    }
+
     // Apply sidebar tint color (with opacity) when set.
     // Prefer the light/dark variant over the fallback tint_color.
     {
