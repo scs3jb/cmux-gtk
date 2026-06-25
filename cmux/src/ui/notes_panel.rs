@@ -320,6 +320,13 @@ pub fn create_notes_widget(
             add_note_page(&notebook, si.scope, note, &reserved);
         }
     }
+    // No notes on disk yet — seed an empty, editable note in the most-specific
+    // scope so the panel is usable immediately (and the tab bar + "+" show).
+    if notebook.n_pages() == 0 {
+        if let Some(si) = scope_infos.last() {
+            new_note_in(&notebook, si, &reserved);
+        }
+    }
     // Default to the most specific scope's last note.
     let pages = notebook.n_pages();
     if pages > 0 {
@@ -577,7 +584,8 @@ fn build_note_editor_inner(
         });
     }
 
-    // On focus loss: persist content, or delete + remove the tab if empty.
+    // On focus loss: persist content, or (when empty) delete the file and drop
+    // the abandoned tab — but never the last one, so the panel stays usable.
     {
         let buffer_w = buffer.clone();
         let path_ref = path_ref.clone();
@@ -593,12 +601,15 @@ fn build_note_editor_inner(
                     let _ = std::fs::remove_file(&path);
                 }
                 reserved.borrow_mut().remove(&path);
-                // Defer page removal so we don't destroy the widget mid-signal.
+                // Defer page removal so we don't destroy the widget mid-signal;
+                // keep the last tab so the panel never goes blank.
                 let notebook = notebook.clone();
                 let editor = editor.clone();
                 glib::idle_add_local_once(move || {
-                    if let Some(n) = notebook.page_num(&editor) {
-                        notebook.remove_page(Some(n));
+                    if notebook.n_pages() > 1 {
+                        if let Some(n) = notebook.page_num(&editor) {
+                            notebook.remove_page(Some(n));
+                        }
                     }
                 });
             } else {
