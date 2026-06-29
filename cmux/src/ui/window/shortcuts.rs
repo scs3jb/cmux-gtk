@@ -767,6 +767,7 @@ pub(super) fn setup_shortcuts(
                 if let Some(workspace_id) = ws_id {
                     super::event_handler::mark_workspace_read(&state, workspace_id);
                 }
+                super::request_terminal_focus();
                 super::refresh_ui(&list_box, &content_box, &state);
                 glib::Propagation::Stop
             }
@@ -779,6 +780,7 @@ pub(super) fn setup_shortcuts(
                 if let Some(workspace_id) = ws_id {
                     super::event_handler::mark_workspace_read(&state, workspace_id);
                 }
+                super::request_terminal_focus();
                 super::refresh_ui(&list_box, &content_box, &state);
                 glib::Propagation::Stop
             }
@@ -810,6 +812,7 @@ pub(super) fn setup_shortcuts(
                     _ => unreachable!(),
                 };
                 if super::event_handler::select_workspace_by_index(&state, index) {
+                    super::request_terminal_focus();
                     super::refresh_ui(&list_box, &content_box, &state);
                 }
                 glib::Propagation::Stop

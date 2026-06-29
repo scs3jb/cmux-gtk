@@ -435,6 +435,22 @@ pub(crate) fn request_terminal_focus() {
     FOCUS_ACTIVE_TERMINAL.with(|f| f.set(true));
 }
 
+/// Grab keyboard focus on the selected workspace's active pane terminal so
+/// typing goes straight there. Call only after the content has been (re)built —
+/// the terminal surface must already be parented for the grab to take. Used both
+/// by the deferred close-path flag below and directly when opening a workspace.
+pub(crate) fn focus_active_terminal(state: &Rc<AppState>) {
+    let focused = {
+        let tm = lock_or_recover(&state.shared.tab_manager);
+        tm.selected().and_then(|ws| ws.focused_panel_id)
+    };
+    if let Some(pid) = focused {
+        if let Some(surface) = state.terminal_cache.borrow().get(&pid) {
+            surface.grab_focus();
+        }
+    }
+}
+
 pub fn rebuild_content(content_box: &gtk4::Box, state: &Rc<AppState>, window_id: Option<uuid::Uuid>) {
     tracing::debug!("rebuild_content triggered");
 
@@ -523,15 +539,7 @@ pub fn rebuild_content(content_box: &gtk4::Box, state: &Rc<AppState>, window_id:
     // A tab was just closed — move keyboard focus onto the now-active pane's
     // terminal (surfaces are re-parented above, so this runs at the right time).
     if FOCUS_ACTIVE_TERMINAL.with(|f| f.replace(false)) {
-        let focused = {
-            let tm = lock_or_recover(&state.shared.tab_manager);
-            tm.selected().and_then(|ws| ws.focused_panel_id)
-        };
-        if let Some(pid) = focused {
-            if let Some(surface) = state.terminal_cache.borrow().get(&pid) {
-                surface.grab_focus();
-            }
-        }
+        focus_active_terminal(state);
     }
 }
 
@@ -732,6 +740,7 @@ fn update_window_title(content_box: &gtk4::Box, state: &Rc<AppState>) {
 
 fn bind_sidebar_selection(list_box: &gtk4::ListBox, content_box: &gtk4::Box, state: &Rc<AppState>) {
     let state = state.clone();
+    let state_for_activate = state.clone();
     let lb = list_box.clone();
     let content_box = content_box.clone();
 
@@ -748,4 +757,16 @@ fn bind_sidebar_selection(list_box: &gtk4::ListBox, content_box: &gtk4::Box, sta
             refresh_ui(&lb, &content_box, &state);
         }
     });
+
+    // Explicitly opening a workspace (click or Enter) should hand keyboard focus
+    // to its active terminal so typing goes straight there. row-activated fires
+    // only on click/Enter — never on plain arrow-key browsing — so this doesn't
+    // hijack keyboard navigation of the sidebar. The preceding row-selected has
+    // already rebuilt the content, so the terminal surface is parented by now.
+    {
+        let state = state_for_activate;
+        list_box.connect_row_activated(move |_list_box, _row| {
+            focus_active_terminal(&state);
+        });
+    }
 }
