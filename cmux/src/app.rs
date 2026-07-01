@@ -243,6 +243,12 @@ impl AppState {
         self.browser_cache
             .borrow_mut()
             .retain(|panel_id, _| live_panels.contains(panel_id));
+
+        // Sweep the browser-panel registries too — dropping browser_cache alone
+        // leaves the WebView (and its WebProcess) pinned by WEBVIEW_REGISTRY and
+        // a dozen sibling maps that never removed closed panels.
+        #[cfg(feature = "webkit")]
+        crate::ui::browser_panel::prune_browser_panels(&live_panels);
     }
 
     /// Look up a cached browser widget by panel ID.

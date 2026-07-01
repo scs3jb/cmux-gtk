@@ -131,11 +131,62 @@ pub(crate) fn get_webview(panel_id: uuid::Uuid) -> Option<webkit6::WebView> {
     WEBVIEW_REGISTRY.with(|r| r.borrow().get(&panel_id).cloned())
 }
 
-/// Remove a panel from the WebView registry.
-#[allow(dead_code)]
-pub(crate) fn unregister_webview(panel_id: uuid::Uuid) {
-    WEBVIEW_REGISTRY.with(|r| r.borrow_mut().remove(&panel_id));
-    CHROME_BARS.with(|r| r.borrow_mut().remove(&panel_id));
+/// Drop every browser-panel registry entry whose panel is no longer live.
+///
+/// Browser panels used to leak on close: closing one unparented its widget but
+/// left strong references behind in ~14 thread-local registries — most
+/// importantly `WEBVIEW_REGISTRY`, which pinned the `WebView` (and kept its
+/// separate WebProcess alive) forever. This sweeps them all, keyed by live
+/// panel id, mirroring how `prune_terminal_cache` retains `terminal_cache`.
+/// Call it from `AppState::prune_terminal_cache` after each UI refresh.
+pub(crate) fn prune_browser_panels(live_panel_ids: &std::collections::HashSet<uuid::Uuid>) {
+    // Stop loading on WebViews about to be dropped so tearing down their
+    // WebProcess can't segfault mid-load (same reason as `stop_all_webviews`).
+    WEBVIEW_REGISTRY.with(|r| {
+        let mut map = r.borrow_mut();
+        map.retain(|id, wv| {
+            let live = live_panel_ids.contains(id);
+            if !live {
+                wv.stop_loading();
+            }
+            live
+        });
+    });
+
+    // Cancel any pending discard timer before dropping the source id.
+    DISCARD_TIMERS.with(|r| {
+        let mut map = r.borrow_mut();
+        let dead: Vec<uuid::Uuid> = map.keys().filter(|id| !live_panel_ids.contains(id)).copied().collect();
+        for id in dead {
+            if let Some(source) = map.remove(&id) {
+                source.remove();
+            }
+        }
+    });
+
+    // Plain panel-keyed maps holding widgets / cached data.
+    macro_rules! retain_live {
+        ($($reg:ident),* $(,)?) => {
+            $( $reg.with(|r| r.borrow_mut().retain(|id, _| live_panel_ids.contains(id))); )*
+        };
+    }
+    retain_live!(
+        CONSOLE_BUFFERS,
+        DIALOG_HANDLERS,
+        FAVICON_CACHE,
+        CONSOLE_PANELS,
+        CONSOLE_TEXT_VIEWS,
+        DOWNLOAD_BARS,
+        DOWNLOAD_PATHS,
+        DISCARDED_URL,
+        FIND_BARS,
+        FIND_TOGGLE_BTNS,
+        FIND_ENTRIES,
+        CHROME_BARS,
+    );
+
+    // ELEMENT_REFS is keyed by ref string; drop entries whose panel is gone.
+    ELEMENT_REFS.with(|r| r.borrow_mut().retain(|_, v| live_panel_ids.contains(&v.panel_id)));
 }
 
 /// Register a panel's browser chrome (nav bar) for focus-mode toggling.

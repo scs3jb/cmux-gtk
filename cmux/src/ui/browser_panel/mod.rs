@@ -441,6 +441,18 @@ pub fn create_browser_widget_with_profile(
                     let mut end = buf.end_iter();
                     buf.insert(&mut end, &message);
                     buf.insert(&mut end, "\n");
+                    // Cap the TextBuffer itself: the CONSOLE_BUFFERS ring is
+                    // bounded to 100, but this GtkTextBuffer was unbounded, so a
+                    // chatty page (e.g. a dev server logging every frame) grew it
+                    // without limit. Drop the oldest lines once over the cap.
+                    const MAX_CONSOLE_LINES: i32 = 5000;
+                    let line_count = buf.line_count();
+                    if line_count > MAX_CONSOLE_LINES {
+                        let mut start = buf.start_iter();
+                        if let Some(mut cut) = buf.iter_at_line(line_count - MAX_CONSOLE_LINES) {
+                            buf.delete(&mut start, &mut cut);
+                        }
+                    }
                     // Auto-scroll to bottom
                     if let Some(mark) = buf.mark("insert") {
                         tv.scroll_to_mark(&mark, 0.0, false, 0.0, 0.0);
